@@ -24,6 +24,12 @@ function check(string $name, bool $ok, string $detail = ''): void
     if ($ok) { $pass++; echo "  OK    $name\n"; }
     else { $fail++; $failures[] = $name; echo "  FAIL  $name" . ($detail ? "  [$detail]" : '') . "\n"; }
 }
+/** is_file() sense la memòria cau d'estat de PHP (el servidor web canvia el disc mentre el test s'executa). */
+function freshIsFile(string $p): bool
+{
+    clearstatcache(true, $p);
+    return is_file($p);
+}
 function section(string $t): void { echo "\n== $t ==\n"; }
 
 /** Petició HTTP sense seguir redireccions. Retorna ['status','headers','body','location','cookies']. */
@@ -36,7 +42,11 @@ function req(string $method, string $path, array $data = [], string $jar = ''): 
         CURLOPT_CUSTOMREQUEST => $method,
     ]);
     if ($jar !== '') { curl_setopt($ch, CURLOPT_COOKIEFILE, $jar); curl_setopt($ch, CURLOPT_COOKIEJAR, $jar); }
-    if ($method === 'POST') { curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data)); }
+    if ($method === 'POST') {
+        // Amb algun CURLFile s'envia multipart/form-data (pujada d'imatges); si no, formulari normal
+        $hasFile = array_filter($data, fn($v) => $v instanceof CURLFile);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $hasFile ? $data : http_build_query($data));
+    }
     $raw = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $hsize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
@@ -62,8 +72,25 @@ function sessionId(string $jar): string
 }
 function newJar(): string { $j = tempnam(sys_get_temp_dir(), 'jar'); return $j; }
 
+/** PNG vàlid escrit a mà (sense GD): degradat w x h. $padBytes afegeix farciment al final (per provar el límit de mida). */
+function makePng(string $path, int $w = 64, int $h = 36, int $padBytes = 0): void
+{
+    $raw = '';
+    for ($y = 0; $y < $h; $y++) {
+        $raw .= "\0";
+        for ($x = 0; $x < $w; $x++) { $raw .= chr((int) (255 * $x / $w)) . chr((int) (255 * $y / $h)) . chr(160); }
+    }
+    $chunk = fn(string $t, string $d) => pack('N', strlen($d)) . $t . $d . pack('N', crc32($t . $d));
+    $png = "\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', $w, $h, 8, 2, 0, 0, 0)) . $chunk('IDAT', gzcompress($raw)) . $chunk('IEND', '');
+    file_put_contents($path, $png . ($padBytes ? str_repeat("\0", $padBytes) : ''));
+}
+$TINY_JPEG = base64_decode('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/yQALCAABAAEBAREA/8wABgAQEAX/2gAIAQEAAD8A0s8g/9k=');
+$TINY_WEBP = base64_decode('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==');
+
 $errorLog = $root . '/storage/logs/error.log';
-$logBefore = is_file($errorLog) ? filesize($errorLog) : 0;
+$uploadsDir = $root . '/public/uploads/scores';
+$uploadsInitial = array_values(array_diff(scandir($uploadsDir), ['.', '..']));
+$logBefore = freshIsFile($errorLog) ? filesize($errorLog) : 0;
 $suffix = substr(bin2hex(random_bytes(4)), 0, 6);
 $user = "test_$suffix";
 $goodPass = 'Prova2026Ok';
@@ -325,10 +352,253 @@ try {
     check('Contrast WCAG AA en els DOS temes (tools/contrast.php) i blocs clars idèntics', $codi === 0, implode(' | ', array_slice(array_filter($out, fn($l) => str_contains($l, 'FAIL') || str_contains($l, 'ERROR')), 0, 3)));
     $hardcoded = 0;
     foreach (['components.css', 'pages.css'] as $cssFile) { $hardcoded += preg_match_all('/(?<![\w-])#[0-9a-fA-F]{3,6}\b/', preg_replace('/\/\*.*?\*\//s', '', file_get_contents($root . '/public/css/' . $cssFile))); }
-    check('Només els 6 colors d\'avatar són fixos als CSS de components/pàgines (la resta, via tokens de tema)', $hardcoded === 6, "$hardcoded colors fixos");
+    check('Colors fixos als CSS de components/pàgines: només els 6 d\'avatar i el text secundari de la targeta amb imatge (la resta, via tokens de tema)', $hardcoded === 7, "$hardcoded colors fixos");
     $page = file_get_contents($root . '/public/css/base.css');
     check('Layout: .page centrat (margin-inline:auto) amb amplada màxima de 56rem', preg_match('/\.page\s*\{[^}]*min\(100% - 2rem, 56rem\)[^}]*margin-inline:\s*auto/', $page) === 1);
     foreach (['/scores', '/scores/1'] as $p) { check("Layout $p: contingut dins de .page", str_contains(req('GET', $p)['body'], 'class="page"')); }
+
+    section('6e. Imatges de fons: pujada segura, substitució, eliminació i propietat');
+    $uploads = $root . '/public/uploads/scores';
+    $files = fn() => array_values(array_diff(scandir($uploads), ['.', '..', '.gitkeep']));
+    $tmp = sys_get_temp_dir() . "/tst_$suffix"; @mkdir($tmp);
+    makePng("$tmp/ok.png"); file_put_contents("$tmp/ok.jpg", $TINY_JPEG); file_put_contents("$tmp/ok.webp", $TINY_WEBP);
+    $fields = fn(array $over = []) => array_merge($newScore, ['official_url' => ''], $over);
+    // Envia un formulari (multipart si hi ha fitxer). $tokenPath = pàgina d'on es treu el token CSRF.
+    $send = function (string $path, array $over, ?array $file, string $tokenPath, ?string $j = null) use (&$jar, $fields) {
+        $j = $j ?? $jar;
+        $data = $fields($over); $data['csrf_token'] = csrf($tokenPath, $j);
+        if ($file) { $data['image'] = new CURLFile($file[0], $file[1] ?? 'image/png', $file[2] ?? basename($file[0])); }
+        return req('POST', $path, $data, $j);
+    };
+    $rowOf = fn(int $id) => $pdo->query("SELECT * FROM scores WHERE id = $id")->fetch();
+    $sid = fn(array $r) => (int) (preg_match('#/scores/(\d+)$#', $r['location'], $m) ? $m[1] : 0);
+    $PATH_RE = '#^uploads/scores/[a-f0-9]{32}\.(jpg|png|webp)$#';
+
+    check('Carpeta d\'imatges amb .htaccess que bloqueja l\'execució', freshIsFile($root . '/public/uploads/.htaccess') && str_contains(file_get_contents($root . '/public/uploads/.htaccess'), 'Require all denied') && str_contains(file_get_contents($root . '/public/uploads/.htaccess'), 'engine off'));
+    $r = req('GET', '/scores/new', [], $jar);
+    check('Formulari de creació: enctype multipart, camp fitxer amb accept, vista prèvia i camp URL oficial', str_contains($r['body'], 'enctype="multipart/form-data"') && str_contains($r['body'], 'type="file"') && str_contains($r['body'], 'accept="image/jpeg,image/png,image/webp"') && str_contains($r['body'], 'data-image-preview') && str_contains($r['body'], 'name="official_url"'));
+
+    // --- Imatges vàlides (JPEG, PNG, WebP) -> es desen amb nom aleatori
+    $ids = [];
+    foreach (['png' => ["$tmp/ok.png", 'image/png', 'a-meva-foto.png'], 'jpg' => ["$tmp/ok.jpg", 'image/jpeg', 'foto.jpeg'], 'webp' => ["$tmp/ok.webp", 'image/webp', 'x.webp']] as $ext => $file) {
+        $before = count($files());
+        $r = $send('/scores/new', ['beatmap_title' => "Amb imatge $ext"], $file, '/scores/new');
+        $id = $sid($r); $row = $id ? $rowOf($id) : null; $ids[$ext] = $id;
+        check("Crear amb imatge $ext vàlida -> 302 i desada", $r['status'] === 302 && $row && preg_match($PATH_RE, (string) $row['image_path']) === 1 && str_ends_with($row['image_path'], ".$ext") && count($files()) === $before + 1, $r['status'] . ' ' . ($row['image_path'] ?? '-'));
+        check("Imatge $ext: fitxer al disc amb el tipus real correcte i nom aleatori (no l'original)", $row && freshIsFile($root . '/public/' . $row['image_path']) && !str_contains($row['image_path'], 'foto') && !str_contains($row['image_path'], 'meva') && (new finfo(FILEINFO_MIME_TYPE))->file($root . '/public/' . $row['image_path']) === ['png' => 'image/png', 'jpg' => 'image/jpeg', 'webp' => 'image/webp'][$ext]);
+    }
+    $row = $rowOf($ids['png']);
+    $ch = curl_init($base . '/' . $row['image_path']); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true]);
+    $resp = curl_exec($ch); $imgStatus = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+    check('La imatge es serveix per HTTP (200, image/png, nosniff)', $imgStatus === 200 && stripos($resp, 'Content-Type: image/png') !== false, "status $imgStatus");
+    $r = req('GET', '/scores/' . $ids['png'], [], $jar);
+    check('Targeta amb imatge: classe score--has-image i --card-image amb la ruta', str_contains($r['body'], 'score--has-image') && str_contains($r['body'], '--card-image: url(') && str_contains($r['body'], $row['image_path']));
+    check('Una score SENSE imatge no porta score--has-image (aspecte per defecte)', !str_contains(req('GET', '/scores/1')['body'], 'score--has-image'));
+
+    // --- Nom d'arxiu maliciós: el nom original MAI s'usa
+    $r = $send('/scores/new', ['beatmap_title' => 'Traversal'], ["$tmp/ok.png", 'image/png', '../../../evil.php'], '/scores/new');
+    $id = $sid($r); $row = $id ? $rowOf($id) : null;
+    check('Nom "../../../evil.php" amb contingut PNG real: es desa amb nom aleatori .png dins de uploads/', $row && preg_match($PATH_RE, (string) $row['image_path']) === 1 && !file_exists($root . '/evil.php') && !file_exists($root . '/public/evil.php') && !file_exists($uploads . '/evil.php') && !glob($root . '/public/uploads/scores/*evil*'));
+    $ids['trav'] = $id;
+
+    // --- Fitxers rebutjats: 422, cap fila nova i cap fitxer nou
+    file_put_contents("$tmp/evil.jpg", '<?php echo "pwn"; ?>');
+    makePng("$tmp/poly.png"); file_put_contents("$tmp/poly.png", '<?php system($_GET["c"]); ?>', FILE_APPEND);
+    file_put_contents("$tmp/a.png", "GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;");
+    file_put_contents("$tmp/a.svg", '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    file_put_contents("$tmp/page.jpg", '<html><body><script>alert(1)</script></body></html>');
+    file_put_contents("$tmp/empty.png", '');
+    makePng("$tmp/huge.png", 64, 36, 5 * 1024 * 1024 + 200000);
+    $rejects = [
+        'PHP renomenat a .jpg (amb MIME image/jpeg declarat)' => ["$tmp/evil.jpg", 'image/jpeg'],
+        'PNG amb codi PHP al final (políglot)' => ["$tmp/poly.png", 'image/png'],
+        'GIF amb extensió .png' => ["$tmp/a.png", 'image/png'],
+        'SVG amb <script>' => ["$tmp/a.svg", 'image/svg+xml'],
+        'HTML amb extensió .jpg' => ["$tmp/page.jpg", 'image/jpeg'],
+        'Fitxer buit' => ["$tmp/empty.png", 'image/png'],
+        'PNG vàlid de més de 5 MB' => ["$tmp/huge.png", 'image/png'],
+    ];
+    $rowsBefore = (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c'];
+    foreach ($rejects as $label => $file) {
+        $filesBefore = count($files());
+        $r = $send('/scores/new', ['beatmap_title' => 'No hauria d\'existir'], $file, '/scores/new');
+        check("Rebutjat: $label", $r['status'] === 422 && (str_contains($r['body'], 'no és una imatge vàlida') || str_contains($r['body'], 'massa gran') || str_contains($r['body'], 'buit')) && count($files()) === $filesBefore && (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c'] === $rowsBefore, $r['status']);
+    }
+    check('Cap fitxer PHP ni sospitós a la carpeta d\'imatges', !array_filter($files(), fn($f) => !preg_match('/^[a-f0-9]{32}\.(jpg|png|webp)$/', $f)));
+    $r = $send('/scores/new', ['beatmap_title' => 'Errors+imatge', 'accuracy' => '999'], ["$tmp/ok.png"], '/scores/new');
+    check('Formulari amb errors + imatge: no es desa cap fitxer i s\'avisa de tornar-la a seleccionar', $r['status'] === 422 && str_contains($r['body'], 'La imatge no s&#039;ha desat') && $pdo->query("SELECT COUNT(*) c FROM scores WHERE beatmap_title = 'Errors+imatge'")->fetch()['c'] == 0);
+    check('Error de la imatge: missatge enllaçat al camp (aria-invalid + resum)', str_contains($send('/scores/new', ['beatmap_title' => 'x'], ["$tmp/evil.jpg", 'image/jpeg'], '/scores/new')['body'], 'href="#image"'));
+
+    // --- Edició: conservar, substituir, treure
+    $editId = $ids['png']; $row = $rowOf($editId); $oldPath = $row['image_path'];
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Canvi de títol'], null, "/scores/$editId/edit");
+    check('Editar sense tocar la imatge: es conserva', $r['status'] === 302 && $rowOf($editId)['image_path'] === $oldPath && freshIsFile($root . '/public/' . $oldPath));
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Substituïda'], ["$tmp/ok.webp", 'image/webp'], "/scores/$editId/edit");
+    $newPath = $rowOf($editId)['image_path'];
+    check('Substituir la imatge: ruta nova, fitxer nou i el VELL esborrat del disc', $r['status'] === 302 && $newPath !== $oldPath && preg_match($PATH_RE, $newPath) === 1 && freshIsFile($root . '/public/' . $newPath) && !freshIsFile($root . '/public/' . $oldPath));
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Treta', 'remove_image' => '1'], null, "/scores/$editId/edit");
+    check('Treure la imatge (casella): BD a NULL i fitxer esborrat', $r['status'] === 302 && $rowOf($editId)['image_path'] === null && !freshIsFile($root . '/public/' . $newPath), "status {$r['status']} db=" . var_export($rowOf($editId)['image_path'], true) . ' fitxer=' . (freshIsFile($root . '/public/' . $newPath) ? 'sí' : 'no'));
+    check('Sense imatge la targeta torna a l\'aspecte per defecte', !str_contains(req('GET', "/scores/$editId", [], $jar)['body'], 'score--has-image'));
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Torna'], ["$tmp/ok.png"], "/scores/$editId/edit");
+    $path1 = $rowOf($editId)['image_path'];
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Ambdues', 'remove_image' => '1'], ["$tmp/ok.jpg", 'image/jpeg'], "/scores/$editId/edit");
+    check('Pujar i marcar "treure" alhora: guanya la pujada (substitueix)', $rowOf($editId)['image_path'] !== null && $rowOf($editId)['image_path'] !== $path1 && !freshIsFile($root . '/public/' . $path1) && str_ends_with($rowOf($editId)['image_path'], '.jpg'));
+    $keep = $rowOf($editId)['image_path']; $filesBefore = count($files());
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Invalida'], ["$tmp/evil.jpg", 'image/jpeg'], "/scores/$editId/edit");
+    check('Substituir per un fitxer invàlid: 422 i la imatge actual NO es toca', $r['status'] === 422 && $rowOf($editId)['image_path'] === $keep && freshIsFile($root . '/public/' . $keep) && count($files()) === $filesBefore);
+    $r = $send("/scores/$editId/edit", ['beatmap_title' => 'Manipulada', 'image_path' => 'uploads/scores/' . str_repeat('a', 32) . '.png', 'official_url' => ''], null, "/scores/$editId/edit");
+    check('Camp "image_path" enviat pel navegador: s\'ignora (la ruta només la fixa el servidor)', $r['status'] === 302 && $rowOf($editId)['image_path'] === $keep);
+
+    // --- Un altre usuari no pot tocar imatges d'una score aliena
+    $tokB = csrf('/my-scores', $jar2); $imgsBefore = $files(); $rowA = $rowOf($editId);
+    $d = $fields(['beatmap_title' => 'B ataca', 'remove_image' => '1']); $d['csrf_token'] = $tokB; $d['image'] = new CURLFile("$tmp/ok.png", 'image/png', 'a.png');
+    check('USUARI B: substituir/treure la imatge d\'una score d\'A -> 403', req('POST', "/scores/$editId/edit", $d, $jar2)['status'] === 403);
+    check('Les imatges i la fila d\'A segueixen intactes després de l\'atac d\'B', $files() === $imgsBefore && $rowOf($editId) == $rowA && freshIsFile($root . '/public/' . $keep));
+    $d2 = ['csrf_token' => $tokB];
+    check('USUARI B: eliminar la score d\'A (amb imatge) -> 403 i la imatge segueix al disc', req('POST', "/scores/$editId/delete", $d2, $jar2)['status'] === 403 && freshIsFile($root . '/public/' . $keep));
+
+    // --- Eliminar una score esborra la seva imatge (i només la seva)
+    $others = array_diff($files(), [basename($keep)]);
+    $r = req('POST', "/scores/$editId/delete", ['csrf_token' => csrf("/scores/$editId/delete", $jar)], $jar);
+    check('Eliminar la score: la fila i la seva imatge desapareixen', $r['status'] === 302 && !$rowOf($editId) && !freshIsFile($root . '/public/' . $keep), "status {$r['status']} fila=" . var_export((bool) $rowOf($editId), true) . ' fitxer=' . (freshIsFile($root . '/public/' . $keep) ? 'sí' : 'no'));
+    check('Només s\'esborra la imatge d\'aquesta score (les altres segueixen)', array_values($others) === array_values($files()) || count(array_diff($others, $files())) === 0);
+
+    // --- Una ruta manipulada a la BD no es mostra ni es pot fer servir per esborrar res
+    $evilPaths = ['../../config/config.php', 'uploads/scores/../../../config/config.php', 'uploads/scores/x.php', "uploads/scores/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png' ); background:url(http://evil/", 'http://evil.example/x.png'];
+    $okRows = 0; $origJpg = $rowOf($ids['jpg'])['image_path'];
+    foreach ($evilPaths as $p) {
+        $pdo->prepare('UPDATE scores SET image_path = ? WHERE id = ?')->execute([$p, $ids['jpg']]);
+        $b = req('GET', '/scores/' . $ids['jpg'], [], $jar)['body'];
+        $okRows += !str_contains($b, 'score--has-image') && !str_contains($b, 'evil') ? 1 : 0;
+    }
+    check('Rutes d\'imatge manipulades a la BD (.., .php, URL externa, inyecció CSS): la targeta NO les mostra', $okRows === count($evilPaths), "$okRows/" . count($evilPaths));
+    @unlink($root . '/public/' . $origJpg);   // el fitxer que quedava orfe després de manipular la ruta
+    $cfg = file_get_contents($root . '/config/config.php');
+    $tokD = csrf('/scores/' . $ids['jpg'] . '/delete', $jar);
+    req('POST', '/scores/' . $ids['jpg'] . '/delete', ['csrf_token' => $tokD], $jar);
+    check('Eliminar una score amb ruta manipulada NO esborra cap fitxer fora de la carpeta d\'imatges', $cfg === file_get_contents($root . '/config/config.php') && freshIsFile($root . '/config/config.php'));
+
+    // --- Execució de PHP a la carpeta d'imatges: ha de ser impossible
+    file_put_contents($uploads . "/_probe_$suffix.php", '<?php echo "EXECUTAT_" . "OK"; ?>');
+    file_put_contents($uploads . "/_probe_$suffix.html", '<script>alert(1)</script>');
+    $ch = curl_init($base . "/uploads/scores/_probe_$suffix.php"); curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); $body = curl_exec($ch); $st = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+    check('Un .php dins de uploads/ NO s\'executa ni es serveix (403)', $st === 403 && !str_contains((string) $body, 'EXECUTAT_OK'), "status $st");
+    $ch = curl_init($base . "/uploads/scores/_probe_$suffix.html"); curl_setopt($ch, CURLOPT_RETURNTRANSFER, true); curl_exec($ch); $st = curl_getinfo($ch, CURLINFO_RESPONSE_CODE); curl_close($ch);
+    check('Un .html dins de uploads/ tampoc es serveix (només imatges)', $st === 403, "status $st");
+    @unlink($uploads . "/_probe_$suffix.php"); @unlink($uploads . "/_probe_$suffix.html");
+    check('/uploads/scores/ no llista el directori', !in_array(req('GET', '/uploads/scores/')['status'], [200], true));
+
+    section('6f. URL oficial de la score');
+    $goodUrls = ['https://osu.ppy.sh/scores/123456789' => 'https://osu.ppy.sh/scores/123456789', 'https://osu.ppy.sh/scores/osu/987654' => 'https://osu.ppy.sh/scores/osu/987654',
+                 'HTTPS://OSU.PPY.SH/scores/Mania/55/' => 'https://osu.ppy.sh/scores/mania/55', '  https://osu.ppy.sh/scores/taiko/7  ' => 'https://osu.ppy.sh/scores/taiko/7', 'https://osu.ppy.sh/scores/fruits/99' => 'https://osu.ppy.sh/scores/fruits/99'];
+    foreach ($goodUrls as $in => $out) {
+        $r = $send('/scores/new', ['beatmap_title' => 'URL ok', 'official_url' => $in], null, '/scores/new');
+        $id = $sid($r);
+        check('URL oficial acceptada i normalitzada: ' . trim($in), $r['status'] === 302 && $id && $rowOf($id)['official_url'] === $out, $r['status'] . ' ' . ($id ? $rowOf($id)['official_url'] : '-'));
+        if ($id && $in === 'https://osu.ppy.sh/scores/123456789') { $urlScoreId = $id; }
+    }
+    $badUrls = ['http://osu.ppy.sh/scores/1', 'javascript:alert(1)', 'https://evil.com/scores/1', 'https://osu.ppy.sh.evil.com/scores/1', 'https://evil.com/?u=https://osu.ppy.sh/scores/1',
+                'https://user@osu.ppy.sh/scores/1', 'https://osu.ppy.sh:8443/scores/1', 'https://osu.ppy.sh/users/1', 'https://osu.ppy.sh/scores/abc', 'https://osu.ppy.sh/scores/1?x=1',
+                'https://osu.ppy.sh/scores/1#a', "https://osu.ppy.sh/scores/1\n<script>", 'https://osu.ppy.sh/scores/12345678901234', '//osu.ppy.sh/scores/1', 'ftp://osu.ppy.sh/scores/1',
+                'data:text/html,<script>alert(1)</script>', 'osu.ppy.sh/scores/1', 'https://osu.ppy.sh/scores/1/extra', 'https://osu.ppy.sh/scores/osu', 'https://osu.ppy.sh/scores/unknownmode/5'];
+    $rowsBefore = (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c']; $badOk = 0; $badList = [];
+    foreach ($badUrls as $bad) {
+        $r = $send('/scores/new', ['beatmap_title' => 'URL dolenta', 'official_url' => $bad], null, '/scores/new');
+        if ($r['status'] === 422 && str_contains($r['body'], 'URL oficial de score') && str_contains($r['body'], 'href="#official_url"')) { $badOk++; } else { $badList[] = substr($bad, 0, 30) . "→{$r['status']}"; }
+    }
+    check('20 URL no oficials o malicioses rebutjades (http, javascript:, altres dominis, subdominis falsos, userinfo, port, camí o paràmetres)', $badOk === count($badUrls) && (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c'] === $rowsBefore, implode(', ', $badList));
+    $r = req('POST', "/scores/{$urlScoreId}/edit", array_merge($fields(['beatmap_title' => 'Edit URL', 'official_url' => 'https://evil.com/scores/1']), ['csrf_token' => csrf("/scores/$urlScoreId/edit", $jar)]), $jar);
+    check('Editar amb URL no oficial: 422 i la URL guardada no canvia', $r['status'] === 422 && $rowOf($urlScoreId)['official_url'] === 'https://osu.ppy.sh/scores/123456789');
+    $r = req('POST', "/scores/{$urlScoreId}/edit", array_merge($fields(['beatmap_title' => 'Edit URL', 'official_url' => '']), ['csrf_token' => csrf("/scores/$urlScoreId/edit", $jar)]), $jar);
+    check('Editar deixant la URL buida la treu (NULL)', $r['status'] === 302 && $rowOf($urlScoreId)['official_url'] === null);
+    $r = req('POST', "/scores/{$urlScoreId}/edit", array_merge($fields(['beatmap_title' => 'Edit URL', 'official_url' => 'https://osu.ppy.sh/scores/123456789']), ['csrf_token' => csrf("/scores/$urlScoreId/edit", $jar)]), $jar);
+    $anon = req('GET', "/scores/$urlScoreId")['body'];
+    check('Botó "Official score": visible per a tothom, target=_blank i rel="noopener noreferrer"', preg_match('#<a class="btn btn--sm btn--official" href="https://osu\.ppy\.sh/scores/123456789" target="_blank" rel="noopener noreferrer"[^>]*>Official score#', $anon) === 1);
+    check('El botó indica per a lectors de pantalla que s\'obre en una pestanya nova', str_contains($anon, 'pestanya nova'));
+    check('Sense URL oficial NO hi ha botó "Official score"', !str_contains(req('GET', '/scores/1')['body'], 'Official score'));
+    foreach (['javascript:alert(1)', 'https://evil.com/scores/1', 'https://osu.ppy.sh/scores/1"><script>alert(1)</script>', 'https://osu.ppy.sh/users/2'] as $badDb) {
+        $pdo->prepare('UPDATE scores SET official_url = ? WHERE id = ?')->execute([$badDb, $urlScoreId]);
+        $b = req('GET', "/scores/$urlScoreId")['body'];
+        if (str_contains($b, 'Official score') || str_contains($b, 'evil.com') || str_contains($b, '<script>alert(1)')) { $leak = $badDb; }
+    }
+    check('URL invàlida guardada directament a la BD: el botó NO es mostra (es revalida en mostrar-la)', !isset($leak), $leak ?? '');
+    $pdo->prepare('UPDATE scores SET official_url = ? WHERE id = ?')->execute(['https://osu.ppy.sh/scores/123456789', $urlScoreId]);
+    check('Botó "Official score" també al llistat públic', str_contains(req('GET', '/scores?per_page=10')['body'], 'Official score'));
+
+    section('6g. Dificultat: escala de colors 0-10');
+    require_once $root . '/app/Helpers/stars.php';
+    check('Escala: 0 estrelles = gris molt fosc, 10 = negre', starStyle(0)['color'] === '#3B3B46' && starStyle(10)['color'] === '#000000');
+    $expect = [1 => '#5EC8FF', 2 => '#5BE37A', 3 => '#FFD43B', 4 => '#FF9A3C', 5 => '#FF4B4B', 6 => '#FF5CA8', 7 => '#B05CFF', 8 => '#6A2EC2', 9 => '#2D1458'];
+    $allStops = true; foreach ($expect as $n => $hex) { $allStops = $allStops && starStyle($n)['color'] === $hex; }
+    check('Escala: blau clar, verd, groc, taronja, vermell, rosa, lila, lila fosc i lila gairebé negre a 1-9', $allStops);
+    $mid = starStyle(3.5)['color'];
+    check('Decimals interpolats entre colors veïns (3,5 = meitat groc/taronja)', $mid === '#FFB73C', $mid);
+    $steps = []; for ($i = 0; $i <= 100; $i++) { $steps[starStyle($i / 10)['color']] = 1; }
+    check('Canvi progressiu: els 101 valors (0,0 a 10,0) donen colors diferents', count($steps) >= 95, count($steps) . ' colors');
+    check('Valors fora de rang es limiten (-3 -> 0, 99 -> 10)', starStyle(-3)['color'] === starStyle(0)['color'] && starStyle(99)['color'] === starStyle(10)['color']);
+    $minR = 99; for ($i = 0; $i <= 200; $i++) { $minR = min($minR, starStyle($i / 20)['ratio']); }
+    check('Contrast del número sobre la seva pastilla ≥ 3:1 en els 201 valors (text gran), tant al tema clar com al fosc', $minR >= 3.0, sprintf('mínim %.2f', $minR));
+    check('Fons de pastilla clar per als colors foscos (0, 8, 9, 10) i fosc per als vius (1-7)', starStyle(0)['fill'] === STAR_FILL_LIGHT && starStyle(8)['fill'] === STAR_FILL_LIGHT && starStyle(10)['fill'] === STAR_FILL_LIGHT && starStyle(3)['fill'] === STAR_FILL_DARK && starStyle(6)['fill'] === STAR_FILL_DARK);
+    $b3 = req('GET', '/scores/3')['body'];  // 4,95 estrelles
+    check('La targeta i el detall usen el color de l\'escala (--star i --star-fill) i mostren el número real', str_contains($b3, starStyleAttr(4.95)) && str_contains($b3, '4,95'));
+    $form = req('GET', '/scores/new', [], $jar)['body'];
+    check('Formulari: previsualització en directe amb l\'escala (data-star-preview + data-stops)', str_contains($form, 'data-star-preview') && str_contains($form, 'data-stops=') && str_contains($form, 'Entre 0 i 10'));
+    foreach (['10,01', '11', '-1', 'abc'] as $badStar) {
+        $r = $send('/scores/new', ['beatmap_title' => 'Estrelles dolentes', 'star_rating' => $badStar], null, '/scores/new');
+        check("Estrelles fora de l'escala rebutjades: $badStar", $r['status'] === 422 && str_contains($r['body'], 'Les estrelles'));
+    }
+    foreach (['0' => 0.00, '10' => 10.00, '3,45' => 3.45, '9.2' => 9.20] as $okStar => $val) {
+        $r = $send('/scores/new', ['beatmap_title' => 'Estrelles bones', 'star_rating' => (string) $okStar], null, '/scores/new');
+        $id = $sid($r);
+        check("Estrelles acceptades i guardades amb decimals: $okStar", $r['status'] === 302 && $id && (float) $rowOf($id)['star_rating'] === $val);
+    }
+    check('Llistat i detall amb dades reals: cap targeta sense l\'atribut --star', substr_count(req('GET', '/scores?per_page=10')['body'], 'class="stars"') === substr_count(req('GET', '/scores?per_page=10')['body'], '--star:'));
+
+    section('6h. Paginació: mida de pàgina, primera/última i filtres');
+    $pdo->exec("UPDATE scores SET is_published = 0 WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'test\_%')");   // només queden publicades les 12 de demostració
+    $cnt = fn(string $b) => preg_match_all('/<article class="score[ "]/', $b);
+    foreach ([2 => 6, 4 => 3, 6 => 2, 10 => 2] as $pp => $pages) {
+        $b = req('GET', "/scores?per_page=$pp")['body'];
+        check("per_page=$pp: $pp targetes i \"Pàgina 1 de ..\" correcte", $cnt($b) === $pp && preg_match('/Pàgina 1 de (\d+)/', $b, $m) && (int) $m[1] === (int) ceil(((int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE is_published = 1')->fetch()['c']) / $pp), $cnt($b) . ' ' . ($m[1] ?? '-'));
+    }
+    foreach (['3', '0', '-5', 'abc', '99999', '6;DROP TABLE scores', '2.5', ''] as $badPp) {
+        $r = req('GET', '/scores?per_page=' . urlencode($badPp));
+        check("per_page invàlid '" . substr($badPp, 0, 10) . "' -> 200 i mida per defecte (6)", $r['status'] === 200 && $cnt($r['body']) === 6);
+    }
+    $r = req('GET', '/scores?per_page[]=2&page[]=1&sort[]=pp&rank[]=SS');
+    check('Paràmetres en forma d\'array (?per_page[]=2) no trenquen res', $r['status'] === 200 && $cnt($r['body']) === 6);
+    $b = req('GET', '/scores?per_page=2')['body'];
+    check('Pàgina 1: "Primera" i "Anterior" desactivades; "Següent" i "Última" actives', preg_match('#aria-disabled="true">Primera<#', $b) && preg_match('#aria-disabled="true">Anterior<#', $b) && preg_match('#href="[^"]*page=2[^"]*" rel="next">Següent<#', $b) && preg_match('#href="[^"]*per_page=2[^"]*page=6[^"]*">Última<#', $b));
+    $b = req('GET', '/scores?per_page=2&page=6')['body'];
+    check('Última pàgina: "Següent" i "Última" desactivades; "Primera" i "Anterior" actives', preg_match('#aria-disabled="true">Següent<#', $b) && preg_match('#aria-disabled="true">Última<#', $b) && preg_match('#>Primera<#', $b) && preg_match('#rel="prev">Anterior<#', $b) && $cnt($b) === 2);
+    $b = req('GET', '/scores?per_page=2&page=3')['body'];
+    check('Pàgina del mig: indicador "Pàgina 3 de 6" amb aria-current="page" a la pàgina actual', str_contains($b, 'Pàgina 3 de 6') && substr_count($b, 'aria-current="page"') >= 1 && preg_match('#aria-current="page"><span class="visually-hidden">Pàgina </span>3<#', $b));
+    check('Pàgina fora de rang (999) -> última pàgina; (0, -4, abc) -> primera', str_contains(req('GET', '/scores?per_page=4&page=999')['body'], 'Pàgina 3 de 3') && str_contains(req('GET', '/scores?per_page=4&page=0')['body'], 'Pàgina 1 de 3') && str_contains(req('GET', '/scores?per_page=4&page=-4')['body'], 'Pàgina 1 de 3') && str_contains(req('GET', '/scores?per_page=4&page=abc')['body'], 'Pàgina 1 de 3'));
+    $b = req('GET', '/scores?sort=pp&rank=A&per_page=2')['body'];
+    check('Filtre A + per_page 2: 2 pàgines (3 scores) i el text diu "Mostrant 1–2 de 3 scores amb rang A"', $cnt($b) === 2 && str_contains($b, 'Pàgina 1 de 2') && str_contains($b, 'Mostrant 1–2 de 3 scores amb rang A'));
+    check('Els enllaços de pàgina conserven ordre, rang i mida (sort=pp&rank=A&per_page=2&page=2)', preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=2&amp;page=2"#', $b) === 1);
+    check('Els xips d\'ordre conserven rang i mida; els de mida conserven ordre i rang; tots tornen a la pàgina 1', preg_match('#href="[^"]*sort=score&amp;rank=A&amp;per_page=2"[^>]*>Score#', $b) && preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=10"[^>]*>10<#', $b) && preg_match('#href="[^"]*sort=pp&amp;per_page=2"[^>]*>Tots#', $b) && !preg_match('#class="chip" href="[^"]*(\?|&amp;)page=#', $b), implode('|', [preg_match('#href="[^"]*sort=score&amp;rank=A&amp;per_page=2"[^>]*>Score#', $b), preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=10"[^>]*>10<#', $b), preg_match('#href="[^"]*sort=pp&amp;per_page=2"[^>]*>Tots#', $b), preg_match('#class="chip" href="[^"]*(\?|&amp;)page=#', $b)]));
+    check('El xip de la mida actual porta aria-current="true" i el selector té etiqueta accessible', preg_match('#<a class="chip" href="[^"]*"[^>]*aria-current="true">2</a>#', $b) === 1 && str_contains($b, 'id="lbl-mida"') && str_contains($b, 'aria-labelledby="lbl-mida"'));
+    $b = req('GET', '/scores?page=2&per_page=2&rank=A&sort=pp')['body'];
+    check('Pàgina 2 del filtre A (2 per pàgina): 1 targeta i "Mostrant 3–3 de 3"', $cnt($b) === 1 && str_contains($b, 'Mostrant 3–3 de 3'));
+    $b = req('GET', '/scores?rank=SS&per_page=10')['body'];
+    check('Una sola pàgina de resultats: no es mostra el paginador', !str_contains($b, 'aria-label="Paginació"'));
+    $b = req('GET', '/scores?rank=SS&per_page=2&page=9')['body'];
+    check('Pàgina inexistent amb filtre: es corregeix sense error', $cnt($b) === 2);
+    check('Paginació responsive: els números veïns s\'amaguen en mòbil (CSS) i els controls tenen mida tàctil', str_contains(file_get_contents($root . '/public/css/components.css'), '.pager__num { display: none; }') && str_contains(file_get_contents($root . '/public/css/components.css'), 'max-width: 35.99rem'));
+
+    section('6i. Rang del jugador i data sense frases explicatives; fons animat');
+    $b = req('GET', '/scores?per_page=10')['body'];
+    check('Cap targeta diu "per PP total" ni "Publicada el"', !str_contains($b, 'per PP total') && !str_contains($b, 'Publicada el') && !str_contains($b, 'Publicada'));
+    check('Es mostra la classificació (#N) i els PP totals del jugador', preg_match('#<span class="player-rank"><span class="visually-hidden">Classificació </span>\#\d+</span>\s*<span class="player-pp"><span class="visually-hidden">PP totals </span>[\d.,]+ pp</span>#', $b) === 1);
+    check('Els valors de classificació i PP són reals (demo_kaito #4 amb 373,00 pp)', preg_match('#demo_kaito</p>\s*<p class="score__player-meta">\s*<span class="player-rank"><span class="visually-hidden">Classificació </span>\#4</span>\s*<span class="player-pp"><span class="visually-hidden">PP totals </span>373,00 pp#', $b) === 1);
+    check('La data es mostra només com DD/MM/AAAA dins de <time>', preg_match('#<time datetime="\d{4}-\d{2}-\d{2}">\d{2}/\d{2}/\d{4}</time>#', $b) === 1 && !preg_match('#(el|del|data:)\s*<time#i', $b));
+    $cssAll = file_get_contents($root . '/public/css/base.css');
+    check('Fons: eliminada la rejilla (cap linear-gradient de línies ni token --grid)', !str_contains($cssAll, '--grid') && !preg_match('/background-image:\s*linear-gradient\(var\(--grid/', $cssAll) && !str_contains($cssAll, 'background-size: 2.5rem'));
+    check('Fons animat: capes body::before/::after amb degradats radials, @keyframes, només transform', str_contains($cssAll, 'body::before') && str_contains($cssAll, 'body::after') && substr_count($cssAll, 'radial-gradient') >= 4 && str_contains($cssAll, '@keyframes glow-a') && str_contains($cssAll, '@keyframes glow-b') && !preg_match('/@keyframes glow-[ab]\s*\{[^}]*(left|top|width|height|background)/s', $cssAll));
+    check('Fons: darrere del contingut, sense interceptar clics, animació lenta (≥ 60 s)', str_contains($cssAll, 'z-index: -1') && str_contains($cssAll, 'pointer-events: none') && preg_match('/animation: glow-a (\d+)s/', $cssAll, $mm) && (int) $mm[1] >= 60 && preg_match('/animation: glow-b (\d+)s/', $cssAll, $mm2) && (int) $mm2[1] >= 60);
+    check('Fons: respecta prefers-color-scheme (tokens de brillo als 3 blocs de tema) i prefers-reduced-motion', substr_count($cssAll, '--glow-1:') === 3 && str_contains($cssAll, 'prefers-reduced-motion: reduce') && str_contains($cssAll, 'animation: none !important'));
+    check('Fons: opacitat baixa (cap alfa de brillo > 0,20)', (function () use ($cssAll) { preg_match_all('/--glow-\d: rgb\(\d+ \d+ \d+ \/ ([\d.]+)\)/', $cssAll, $m); return count($m[1]) === 9 && max(array_map('floatval', $m[1])) <= 0.20; })());
 
     section('6b. Capçaleres de seguretat');
     $r = req('GET', '/my-scores', [], $jar);
@@ -362,8 +632,8 @@ try {
     req('POST', '/login', ['csrf_token' => $tok, 'username' => $user, 'password' => $goodPass], $jar3);
     $sid = sessionId($jar3);
     $file = rtrim($savePath, '/\\') . "/sess_$sid";
-    check('Fitxer de sessió trobat al servidor (dades NO a la cookie)', is_file($file), $file);
-    if (is_file($file)) {
+    check('Fitxer de sessió trobat al servidor (dades NO a la cookie)', freshIsFile($file), $file);
+    if (freshIsFile($file)) {
         $setActivity = function (int $ageSeconds) use ($file) {
             $c = file_get_contents($file);
             file_put_contents($file, preg_replace('/last_activity\|i:\d+;/', 'last_activity|i:' . (time() - $ageSeconds) . ';', $c));
@@ -403,14 +673,21 @@ try {
         check("$p: jerarquia d'encapçalaments sense salts", !$skip, implode(',', $levels));
     }
 } finally {
+    // Neteja: primer les imatges de les scores de prova (l'esborrat en cascada de la BD no toca el disc), després les dades
+    foreach ($pdo->query("SELECT s.image_path FROM scores s JOIN users u ON u.id = s.user_id WHERE u.username LIKE 'test\_%' AND s.image_path IS NOT NULL")->fetchAll() as $im) {
+        if (preg_match('#^uploads/scores/[a-f0-9]{32}\.(jpg|png|webp)$#', $im['image_path'])) { @unlink($root . '/public/' . $im['image_path']); }
+    }
+    foreach (glob(sys_get_temp_dir() . '/tst_*/*') ?: [] as $tf) { @unlink($tf); }
+    foreach (glob(sys_get_temp_dir() . '/tst_*', GLOB_ONLYDIR) ?: [] as $td) { @rmdir($td); }
     // Neteja: només dades de prova (les scores es borren en cascada)
     $pdo->prepare("DELETE FROM users WHERE username LIKE 'test\\_%'")->execute();
     foreach (glob(sys_get_temp_dir() . '/jar*') as $j) { @unlink($j); }
 }
 
 section('10. Registre d\'errors de PHP');
-$logAfter = is_file($errorLog) ? filesize($errorLog) : 0;
+$logAfter = freshIsFile($errorLog) ? filesize($errorLog) : 0;
 check('Cap error/avís/avís obsolet nou a storage/logs/error.log durant els tests', $logAfter === $logBefore, $logAfter > $logBefore ? trim(substr(file_get_contents($errorLog), $logBefore, 300)) : '');
+check('Carpeta d\'imatges igual que abans dels tests (cap fitxer orfe)', array_values(array_diff(scandir($uploadsDir), ['.', '..'])) === $uploadsInitial, implode(',', array_diff(scandir($uploadsDir), ['.', '..'], $uploadsInitial)));
 check('Usuaris de prova esborrats', (int) $pdo->query("SELECT COUNT(*) c FROM users WHERE username LIKE 'test\\_%'")->fetch()['c'] === 0);
 check('Scores de demostració intactes (12) i usuaris demo (4)', (int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE id <= 12')->fetch()['c'] === 12 && (int) $pdo->query("SELECT COUNT(*) c FROM users WHERE username LIKE 'demo\\_%'")->fetch()['c'] === 4);
 
