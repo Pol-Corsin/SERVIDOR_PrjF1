@@ -1,0 +1,24 @@
+# Autor: Pol Corsin — PT04 osu! Scores
+# Carpeta d'imatges pujades pels usuaris: res d'aquí pot executar-se ni servir-se si no és una imatge.
+
+Options -Indexes -ExecCGI -MultiViews
+
+# 1) Mai executar PHP ni altres scripts
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phps .phar .pl .py .cgi
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+    php_flag engine off
+</IfModule>
+
+# 2) Només es serveixen imatges JPEG, PNG i WebP; qualsevol altre fitxer dóna 403
+<FilesMatch "^(?!.*\.(jpe?g|png|webp)$).*$">
+    Require all denied
+</FilesMatch>
+
+# 3) El navegador no ha d'endevinar el tipus de contingut
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'none'; sandbox"
+</IfModule>
