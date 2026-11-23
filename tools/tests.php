@@ -114,22 +114,28 @@ try {
 
     // -------------------------------------------------------------------------------------
     section('2. Llistat públic: ordre, filtre i paginació');
-    $count = fn(string $body) => substr_count($body, 'class="score"') + substr_count($body, 'class="score score--featured"');
-    check('Pàgina 1: 6 scores', $count(req('GET', '/scores')['body']) === 6);
-    check('Pàgina 2: 6 scores', $count(req('GET', '/scores?page=2')['body']) === 6);
-    check('Pàgina inexistent (99) es corregeix a l\'última', $count(req('GET', '/scores?page=99')['body']) === 6);
+    // Compta les targetes de score siguin com siguin (amb o sense imatge, destacada...)
+    $count = fn(string $body) => preg_match_all('/<article class="score[ "]/', $body);
+    // Expectatives calculades des de la BD (no suposen un nombre fix de scores)
+    $pubT = (int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE is_published = 1')->fetch()['c'];
+    $pubRank = fn(string $rk) => (int) $pdo->query("SELECT COUNT(*) c FROM scores WHERE is_published = 1 AND rank_result = '$rk'")->fetch()['c'];
+    $pagesT = max(1, (int) ceil($pubT / 6));
+    check('Pàgina 1: ' . min(6, $pubT) . ' scores', $count(req('GET', '/scores')['body']) === min(6, $pubT));
+    check('Pàgina 2: ' . max(0, min(6, $pubT - 6)) . ' scores', $count(req('GET', '/scores?page=2')['body']) === ($pagesT >= 2 ? min(6, $pubT - 6) : min(6, $pubT)));
+    check('Pàgina inexistent (99) es corregeix a l\'última', $count(req('GET', '/scores?page=99')['body']) === $pubT - 6 * ($pagesT - 1));
     check('Pàgina invàlida (abc, -3) -> pàgina 1', $count(req('GET', '/scores?page=abc')['body']) === 6 && req('GET', '/scores?page=-3')['status'] === 200);
-    check('Filtre rang SS -> 2 scores', $count(req('GET', '/scores?rank=SS')['body']) === 2);
+    check('Filtre rang SS -> ' . min(6, $pubRank('SS')) . ' scores', $count(req('GET', '/scores?rank=SS')['body']) === min(6, $pubRank('SS')));
     check('Filtre rang invàlid s\'ignora (6 scores)', $count(req('GET', '/scores?rank=ZZ')['body']) === 6);
     $r = req('GET', "/scores?sort=" . urlencode("pp; DROP TABLE scores;--"));
     check('Ordre amb injecció SQL s\'ignora (200, 6 scores)', $r['status'] === 200 && $count($r['body']) === 6);
     check('Taula scores intacta després de la injecció', (int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE id <= 12')->fetch()['c'] === 12);
     $pp = req('GET', '/scores?sort=pp')['body'];
     preg_match('/score__title"><a[^>]*>([^<]+)/', $pp, $m);
-    check('Ordenat per PP: el primer és el de més PP (Midnight Circuit, 412,60)', ($m[1] ?? '') === 'Midnight Circuit', $m[1] ?? '-');
+    $topPp = $pdo->query('SELECT beatmap_title FROM scores WHERE is_published = 1 ORDER BY pp DESC, id DESC LIMIT 1')->fetch()['beatmap_title'];
+    check('Ordenat per PP: el primer és el de més PP segons la BD (' . $topPp . ')', html_entity_decode($m[1] ?? '', ENT_QUOTES) === $topPp, $m[1] ?? '-');
     check('Paginació: nav amb aria-label i aria-current="page"', str_contains($pp, 'aria-label="Paginació"') && str_contains($pp, 'aria-current="page"'));
     $r = req('GET', '/scores?rank=SS&page=2');
-    check('Estat buit no es dispara amb filtre SS (pàgina corregida)', $r['status'] === 200 && $count($r['body']) === 2);
+    check('Estat buit no es dispara amb filtre SS (pàgina corregida)', $r['status'] === 200 && $count($r['body']) === min(6, $pubRank('SS')));
 
     // -------------------------------------------------------------------------------------
     section('3. Registre');
@@ -555,43 +561,58 @@ try {
     check('Llistat i detall amb dades reals: cap targeta sense l\'atribut --star', substr_count(req('GET', '/scores?per_page=10')['body'], 'class="stars"') === substr_count(req('GET', '/scores?per_page=10')['body'], '--star:'));
 
     section('6h. Paginació: mida de pàgina, primera/última i filtres');
-    $pdo->exec("UPDATE scores SET is_published = 0 WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'test\_%')");   // només queden publicades les 12 de demostració
+    // Les scores de prova es despublicuen: el llistat públic només conté les scores reals (demostració + les que hi hagi a la BD).
+    // Cap expectativa suposa un nombre fix: tot es calcula a partir de la BD.
+    $pdo->exec("UPDATE scores SET is_published = 0 WHERE user_id IN (SELECT id FROM users WHERE username LIKE 'test\_%')");
     $cnt = fn(string $b) => preg_match_all('/<article class="score[ "]/', $b);
-    foreach ([2 => 6, 4 => 3, 6 => 2, 10 => 2] as $pp => $pages) {
+    $T = (int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE is_published = 1')->fetch()['c'];
+    $rc = fn(string $rk) => (int) $pdo->query("SELECT COUNT(*) c FROM scores WHERE is_published = 1 AND rank_result = '$rk'")->fetch()['c'];
+    $pg = fn(int $total, int $pp) => max(1, (int) ceil($total / $pp));                                  // nombre de pàgines
+    $onPage = fn(int $total, int $pp, int $page) => max(0, min($pp, $total - (min($page, $pg($total, $pp)) - 1) * $pp)); // targetes a una pàgina
+    foreach ([2, 4, 6, 10] as $pp) {
         $b = req('GET', "/scores?per_page=$pp")['body'];
-        check("per_page=$pp: $pp targetes i \"Pàgina 1 de ..\" correcte", $cnt($b) === $pp && preg_match('/Pàgina 1 de (\d+)/', $b, $m) && (int) $m[1] === (int) ceil(((int) $pdo->query('SELECT COUNT(*) c FROM scores WHERE is_published = 1')->fetch()['c']) / $pp), $cnt($b) . ' ' . ($m[1] ?? '-'));
+        check("per_page=$pp: " . min($pp, $T) . " targetes i \"Pàgina 1 de {$pg($T, $pp)}\" correcte", $cnt($b) === min($pp, $T) && (!str_contains($b, 'Pàgina 1 de') || (preg_match('/Pàgina 1 de (\d+)/', $b, $m) && (int) $m[1] === $pg($T, $pp))), $cnt($b) . ' ' . ($m[1] ?? '-'));
     }
     foreach (['3', '0', '-5', 'abc', '99999', '6;DROP TABLE scores', '2.5', ''] as $badPp) {
         $r = req('GET', '/scores?per_page=' . urlencode($badPp));
-        check("per_page invàlid '" . substr($badPp, 0, 10) . "' -> 200 i mida per defecte (6)", $r['status'] === 200 && $cnt($r['body']) === 6);
+        check("per_page invàlid '" . substr($badPp, 0, 10) . "' -> 200 i mida per defecte (6)", $r['status'] === 200 && $cnt($r['body']) === min(6, $T));
     }
     $r = req('GET', '/scores?per_page[]=2&page[]=1&sort[]=pp&rank[]=SS');
-    check('Paràmetres en forma d\'array (?per_page[]=2) no trenquen res', $r['status'] === 200 && $cnt($r['body']) === 6);
+    check('Paràmetres en forma d\'array (?per_page[]=2) no trenquen res', $r['status'] === 200 && $cnt($r['body']) === min(6, $T));
+    $last2 = $pg($T, 2);
     $b = req('GET', '/scores?per_page=2')['body'];
-    check('Pàgina 1: "Primera" i "Anterior" desactivades; "Següent" i "Última" actives', preg_match('#aria-disabled="true">Primera<#', $b) && preg_match('#aria-disabled="true">Anterior<#', $b) && preg_match('#href="[^"]*page=2[^"]*" rel="next">Següent<#', $b) && preg_match('#href="[^"]*per_page=2[^"]*page=6[^"]*">Última<#', $b));
-    $b = req('GET', '/scores?per_page=2&page=6')['body'];
-    check('Última pàgina: "Següent" i "Última" desactivades; "Primera" i "Anterior" actives', preg_match('#aria-disabled="true">Següent<#', $b) && preg_match('#aria-disabled="true">Última<#', $b) && preg_match('#>Primera<#', $b) && preg_match('#rel="prev">Anterior<#', $b) && $cnt($b) === 2);
+    check('Pàgina 1: "Primera" i "Anterior" desactivades; "Següent" i "Última" actives', preg_match('#aria-disabled="true">Primera<#', $b) && preg_match('#aria-disabled="true">Anterior<#', $b) && preg_match('#href="[^"]*page=2[^"]*" rel="next">Següent<#', $b) && preg_match('#href="[^"]*per_page=2[^"]*page=' . $last2 . '[^"]*">Última<#', $b));
+    $b = req('GET', "/scores?per_page=2&page=$last2")['body'];
+    check('Última pàgina: "Següent" i "Última" desactivades; "Primera" i "Anterior" actives', preg_match('#aria-disabled="true">Següent<#', $b) && preg_match('#aria-disabled="true">Última<#', $b) && preg_match('#>Primera<#', $b) && preg_match('#rel="prev">Anterior<#', $b) && $cnt($b) === $onPage($T, 2, $last2));
     $b = req('GET', '/scores?per_page=2&page=3')['body'];
-    check('Pàgina del mig: indicador "Pàgina 3 de 6" amb aria-current="page" a la pàgina actual', str_contains($b, 'Pàgina 3 de 6') && substr_count($b, 'aria-current="page"') >= 1 && preg_match('#aria-current="page"><span class="visually-hidden">Pàgina </span>3<#', $b));
-    check('Pàgina fora de rang (999) -> última pàgina; (0, -4, abc) -> primera', str_contains(req('GET', '/scores?per_page=4&page=999')['body'], 'Pàgina 3 de 3') && str_contains(req('GET', '/scores?per_page=4&page=0')['body'], 'Pàgina 1 de 3') && str_contains(req('GET', '/scores?per_page=4&page=-4')['body'], 'Pàgina 1 de 3') && str_contains(req('GET', '/scores?per_page=4&page=abc')['body'], 'Pàgina 1 de 3'));
+    check("Pàgina del mig: indicador \"Pàgina 3 de $last2\" amb aria-current=\"page\" a la pàgina actual", str_contains($b, "Pàgina 3 de $last2") && substr_count($b, 'aria-current="page"') >= 1 && preg_match('#aria-current="page"><span class="visually-hidden">Pàgina </span>3<#', $b));
+    $last4 = $pg($T, 4);
+    check("Pàgina fora de rang (999) -> última pàgina ($last4); (0, -4, abc) -> primera", str_contains(req('GET', '/scores?per_page=4&page=999')['body'], "Pàgina $last4 de $last4") && str_contains(req('GET', '/scores?per_page=4&page=0')['body'], "Pàgina 1 de $last4") && str_contains(req('GET', '/scores?per_page=4&page=-4')['body'], "Pàgina 1 de $last4") && str_contains(req('GET', '/scores?per_page=4&page=abc')['body'], "Pàgina 1 de $last4"));
+    $A = $rc('A'); $pagesA = $pg($A, 2);
     $b = req('GET', '/scores?sort=pp&rank=A&per_page=2')['body'];
-    check('Filtre A + per_page 2: 2 pàgines (3 scores) i el text diu "Mostrant 1–2 de 3 scores amb rang A"', $cnt($b) === 2 && str_contains($b, 'Pàgina 1 de 2') && str_contains($b, 'Mostrant 1–2 de 3 scores amb rang A'));
+    check("Filtre A + per_page 2: $pagesA pàgines ($A scores) i el text diu \"Mostrant 1–" . min(2, $A) . " de $A scores amb rang A\"", $cnt($b) === min(2, $A) && str_contains($b, "Pàgina 1 de $pagesA") && str_contains($b, 'Mostrant 1–' . min(2, $A) . " de $A scores amb rang A"));
     check('Els enllaços de pàgina conserven ordre, rang i mida (sort=pp&rank=A&per_page=2&page=2)', preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=2&amp;page=2"#', $b) === 1);
     check('Els xips d\'ordre conserven rang i mida; els de mida conserven ordre i rang; tots tornen a la pàgina 1', preg_match('#href="[^"]*sort=score&amp;rank=A&amp;per_page=2"[^>]*>Score#', $b) && preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=10"[^>]*>10<#', $b) && preg_match('#href="[^"]*sort=pp&amp;per_page=2"[^>]*>Tots#', $b) && !preg_match('#class="chip" href="[^"]*(\?|&amp;)page=#', $b), implode('|', [preg_match('#href="[^"]*sort=score&amp;rank=A&amp;per_page=2"[^>]*>Score#', $b), preg_match('#href="[^"]*sort=pp&amp;rank=A&amp;per_page=10"[^>]*>10<#', $b), preg_match('#href="[^"]*sort=pp&amp;per_page=2"[^>]*>Tots#', $b), preg_match('#class="chip" href="[^"]*(\?|&amp;)page=#', $b)]));
     check('El xip de la mida actual porta aria-current="true" i el selector té etiqueta accessible', preg_match('#<a class="chip" href="[^"]*"[^>]*aria-current="true">2</a>#', $b) === 1 && str_contains($b, 'id="lbl-mida"') && str_contains($b, 'aria-labelledby="lbl-mida"'));
+    $p2 = min(2, $pagesA); $from2 = ($p2 - 1) * 2 + 1; $to2 = min($A, $p2 * 2);
     $b = req('GET', '/scores?page=2&per_page=2&rank=A&sort=pp')['body'];
-    check('Pàgina 2 del filtre A (2 per pàgina): 1 targeta i "Mostrant 3–3 de 3"', $cnt($b) === 1 && str_contains($b, 'Mostrant 3–3 de 3'));
+    check("Pàgina 2 del filtre A (2 per pàgina): " . $onPage($A, 2, 2) . " targetes i \"Mostrant {$from2}–{$to2} de {$A}\"", $cnt($b) === $onPage($A, 2, 2) && str_contains($b, "Mostrant {$from2}–{$to2} de {$A}"));
+    $SS = $rc('SS');
     $b = req('GET', '/scores?rank=SS&per_page=10')['body'];
-    check('Una sola pàgina de resultats: no es mostra el paginador', !str_contains($b, 'aria-label="Paginació"'));
+    check('Una sola pàgina de resultats: no es mostra el paginador', $SS > 10 || !str_contains($b, 'aria-label="Paginació"'));
     $b = req('GET', '/scores?rank=SS&per_page=2&page=9')['body'];
-    check('Pàgina inexistent amb filtre: es corregeix sense error', $cnt($b) === 2);
+    check('Pàgina inexistent amb filtre: es corregeix a l\'última sense error', $cnt($b) === $onPage($SS, 2, 9));
     check('Paginació responsive: els números veïns s\'amaguen en mòbil (CSS) i els controls tenen mida tàctil', str_contains(file_get_contents($root . '/public/css/components.css'), '.pager__num { display: none; }') && str_contains(file_get_contents($root . '/public/css/components.css'), 'max-width: 35.99rem'));
 
     section('6i. Rang del jugador i data sense frases explicatives; fons animat');
     $b = req('GET', '/scores?per_page=10')['body'];
     check('Cap targeta diu "per PP total" ni "Publicada el"', !str_contains($b, 'per PP total') && !str_contains($b, 'Publicada el') && !str_contains($b, 'Publicada'));
     check('Es mostra la classificació (#N) i els PP totals del jugador', preg_match('#<span class="player-rank"><span class="visually-hidden">Classificació </span>\#\d+</span>\s*<span class="player-pp"><span class="visually-hidden">PP totals </span>[\d.,]+ pp</span>#', $b) === 1);
-    check('Els valors de classificació i PP són reals (demo_kaito #4 amb 373,00 pp)', preg_match('#demo_kaito</p>\s*<p class="score__player-meta">\s*<span class="player-rank"><span class="visually-hidden">Classificació </span>\#4</span>\s*<span class="player-pp"><span class="visually-hidden">PP totals </span>373,00 pp#', $b) === 1);
+    // Classificació i PP totals esperats: es calculen de la BD (suma de PP publicats per jugador)
+    $totals = []; foreach ($pdo->query('SELECT u.username, SUM(s.pp) t FROM scores s JOIN users u ON u.id = s.user_id WHERE s.is_published = 1 GROUP BY u.id, u.username')->fetchAll() as $row) { $totals[$row['username']] = (float) $row['t']; }
+    $kaitoTotal = $totals['demo_kaito'] ?? 0.0; $kaitoRank = 1 + count(array_filter($totals, fn($t) => $t > $kaitoTotal)); $kaitoPp = number_format($kaitoTotal, 2, ',', '.');
+    $bAll = $b . req('GET', '/scores?per_page=10&page=2')['body'];
+    check("Els valors de classificació i PP són reals (demo_kaito #$kaitoRank amb $kaitoPp pp, calculat de la BD)", preg_match('#demo_kaito</p>\s*<p class="score__player-meta">\s*<span class="player-rank"><span class="visually-hidden">Classificació </span>\#' . $kaitoRank . '</span>\s*<span class="player-pp"><span class="visually-hidden">PP totals </span>' . preg_quote($kaitoPp, '#') . ' pp#', $bAll) === 1);
     check('La data es mostra només com DD/MM/AAAA dins de <time>', preg_match('#<time datetime="\d{4}-\d{2}-\d{2}">\d{2}/\d{2}/\d{4}</time>#', $b) === 1 && !preg_match('#(el|del|data:)\s*<time#i', $b));
     $cssAll = file_get_contents($root . '/public/css/base.css');
     check('Fons: eliminada la rejilla (cap linear-gradient de línies ni token --grid)', !str_contains($cssAll, '--grid') && !preg_match('/background-image:\s*linear-gradient\(var\(--grid/', $cssAll) && !str_contains($cssAll, 'background-size: 2.5rem'));
@@ -650,6 +671,51 @@ try {
     }
 
     // -------------------------------------------------------------------------------------
+    section('8b. Sessió oberta d\'un compte que ja no existeix (causa de l\'error 500 en crear scores)');
+    // Escenari real: l'usuari té la sessió oberta al navegador, però la taula `users` s'ha tornat a crear
+    // (p. ex. en reimportar pt04_pol_corsin.sql) i el seu compte ja no hi és. Abans: INSERT amb user_id inexistent -> error de clau forana -> 500.
+    $jarG = newJar(); $userG = "test_g$suffix";
+    $tkG = csrf('/register', $jarG);
+    req('POST', '/register', ['csrf_token' => $tkG, 'username' => $userG, 'password' => $goodPass, 'password_confirm' => $goodPass], $jarG);
+    req('POST', '/login', ['csrf_token' => csrf('/login', $jarG), 'username' => $userG, 'password' => $goodPass], $jarG);
+    check('Compte fantasma: sessió iniciada correctament abans de desaparèixer', req('GET', '/my-scores', [], $jarG)['status'] === 200);
+    $gid = (int) $pdo->query("SELECT id FROM users WHERE username = '$userG'")->fetch()['id'];
+    $tokG = csrf('/scores/new', $jarG);                       // token vàlid de la sessió viva
+    $pdo->exec("DELETE FROM users WHERE id = $gid");          // el compte desapareix, la sessió continua al navegador
+    $logBeforeG = is_file($errorLog) ? filesize($errorLog) : 0;
+    $scoresBeforeG = (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c']; $filesBeforeG = count($files());
+
+    $dataG = $fields(['beatmap_title' => 'Compte inexistent']); $dataG['csrf_token'] = $tokG;
+    $r = req('POST', '/scores/new', $dataG, $jarG);
+    check('Crear score SENSE imatge amb el compte desaparegut: NO dóna 500, redirigeix a /login', $r['status'] === 302 && str_ends_with($r['location'], '/login'), "status {$r['status']}");
+    check('No s\'ha creat cap fila ni cap error de clau forana al log', (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c'] === $scoresBeforeG && (is_file($errorLog) ? filesize($errorLog) : 0) === $logBeforeG);
+    $r = req('GET', '/login', [], $jarG);
+    check('S\'explica a l\'usuari què ha passat (missatge clar a /login)', str_contains($r['body'], 'El teu compte ja no existeix'));
+    check('La sessió s\'ha invalidat: ja no hi ha accés a /my-scores', req('GET', '/my-scores', [], $jarG)['status'] === 302);
+
+    // Mateix escenari AMB imatge: no pot quedar cap fitxer orfe
+    $jarH = newJar(); $userH = "test_h$suffix";
+    req('POST', '/register', ['csrf_token' => csrf('/register', $jarH), 'username' => $userH, 'password' => $goodPass, 'password_confirm' => $goodPass], $jarH);
+    req('POST', '/login', ['csrf_token' => csrf('/login', $jarH), 'username' => $userH, 'password' => $goodPass], $jarH);
+    $hid = (int) $pdo->query("SELECT id FROM users WHERE username = '$userH'")->fetch()['id'];
+    $tokH = csrf('/scores/new', $jarH);
+    $pdo->exec("DELETE FROM users WHERE id = $hid");
+    $dataH = $fields(['beatmap_title' => 'Compte inexistent amb imatge']); $dataH['csrf_token'] = $tokH; $dataH['image'] = new CURLFile("$tmp/ok.png", 'image/png', 'foto.png');
+    $r = req('POST', '/scores/new', $dataH, $jarH);
+    check('Crear score AMB imatge amb el compte desaparegut: NO dóna 500, redirigeix a /login', $r['status'] === 302 && str_ends_with($r['location'], '/login'), "status {$r['status']}");
+    check('Cap fila nova i cap fitxer d\'imatge orfe a uploads/', (int) $pdo->query('SELECT COUNT(*) c FROM scores')->fetch()['c'] === $scoresBeforeG && count($files()) === $filesBeforeG);
+
+    // El camí de seguretat de la clau forana (si la sessió fos vàlida però l'INSERT fallés): el controlador no ha de donar un 500 genèric
+    $reg = req('POST', '/register', ['csrf_token' => csrf('/register', $jarG), 'username' => $userG, 'password' => $goodPass, 'password_confirm' => $goodPass], $jarG);
+    check('El nom d\'usuari del compte desaparegut es pot tornar a registrar', $reg['status'] === 302);
+    req('POST', '/login', ['csrf_token' => csrf('/login', $jarG), 'username' => $userG, 'password' => $goodPass], $jarG);
+    $r = req('POST', '/scores/new', array_merge($fields(['beatmap_title' => 'Compte nou']), ['csrf_token' => csrf('/scores/new', $jarG), 'image' => new CURLFile("$tmp/ok.jpg", 'image/jpeg', 'x.jpg')]), $jarG);
+    $locId = fn(array $rr) => (int) (preg_match('#/scores/(\d+)$#', $rr['location'], $mm) ? $mm[1] : 0);
+    $newG = $locId($r);
+    check('Després de registrar-se de nou, crear una score AMB imatge funciona (302 al detall)', $r['status'] === 302 && $newG > 0 && preg_match($PATH_RE, (string) $rowOf($newG)['image_path']) === 1, "status {$r['status']}");
+    $r = req('POST', '/scores/new', array_merge($fields(['beatmap_title' => 'Compte nou sense imatge']), ['csrf_token' => csrf('/scores/new', $jarG)]), $jarG);
+    check('...i SENSE imatge també (302 al detall, image_path NULL)', $r['status'] === 302 && ($id2 = $locId($r)) > 0 && $rowOf($id2)['image_path'] === null);
+
     section('9. Accessibilitat estructural (automàtica, sobre l\'HTML servit)');
     foreach (['/', '/scores', '/scores/1', '/login', '/register', '/guia-estils', '/no-existeix'] as $p) {
         $html = req('GET', $p)['body'];
