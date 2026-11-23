@@ -19,7 +19,11 @@ $rankOptions = ['' => 'Tria un rang'] + array_combine(Score::RANKS, Score::RANKS
     <?php $type = 'error'; $heading = $formError; $alertId = 'resum-errors'; require ROOT_PATH . '/app/Views/partials/alert.php'; ?>
 <?php endif; ?>
 
-<form class="panel" method="post" action="<?= e($formAction) ?>" novalidate>
+<?php if (!empty($imageNote)): ?>
+    <?php $type = 'info'; $heading = $imageNote; require ROOT_PATH . '/app/Views/partials/alert.php'; ?>
+<?php endif; ?>
+
+<form class="panel" method="post" action="<?= e($formAction) ?>" enctype="multipart/form-data" novalidate>
     <?= csrfField() ?>
 
     <fieldset>
@@ -42,7 +46,7 @@ $rankOptions = ['' => 'Tria un rang'] + array_combine(Score::RANKS, Score::RANKS
         <legend>Dificultat</legend>
         <div class="form-grid">
             <?php
-            $id = 'star_rating'; $label = 'Estrelles'; $required = true; $value = $dec($id); $error = $errors[$id] ?? null; $inputmode = 'decimal'; $hint = 'Entre 0 i 15. Exemple: 5,31';
+            $id = 'star_rating'; $label = 'Estrelles'; $required = true; $value = $dec($id); $error = $errors[$id] ?? null; $inputmode = 'decimal'; $hint = 'Entre 0 i 10. Exemple: 5,31';
             require ROOT_PATH . '/app/Views/partials/field.php';
             $id = 'bpm'; $label = 'BPM'; $required = true; $value = $v($id); $error = $errors[$id] ?? null; $inputmode = 'numeric'; $hint = 'Entre 1 i 1000.';
             require ROOT_PATH . '/app/Views/partials/field.php';
@@ -52,6 +56,13 @@ $rankOptions = ['' => 'Tria un rang'] + array_combine(Score::RANKS, Score::RANKS
             require ROOT_PATH . '/app/Views/partials/field.php';
             ?>
         </div>
+        <!-- Previsualització en directe del color de l'escala 0-10 (el JS la recalcula en escriure les estrelles) -->
+        <?php
+        $previewStars = str_replace(',', '.', (string) ($values['star_rating'] ?? '0'));
+        $previewStars = is_numeric($previewStars) ? (float) $previewStars : 0.0;
+        ?>
+        <p class="stars stars--preview" data-star-preview data-stops="<?= e(json_encode(STAR_STOPS)) ?>" data-fill-dark="<?= e(STAR_FILL_DARK) ?>" data-fill-light="<?= e(STAR_FILL_LIGHT) ?>" style="<?= e(starStyleAttr($previewStars)) ?>"><span aria-hidden="true">★</span><span data-star-value><?= e(formatStars($previewStars)) ?></span></p>
+        <p class="hint muted">El color canvia amb la dificultat: de gris (0 estrelles) a negre (10).</p>
     </fieldset>
 
     <fieldset>
@@ -69,6 +80,39 @@ $rankOptions = ['' => 'Tria un rang'] + array_combine(Score::RANKS, Score::RANKS
             $id = 'max_combo'; $label = 'Combo màxim'; $required = true; $value = $v($id); $error = $errors[$id] ?? null; $inputmode = 'numeric';
             require ROOT_PATH . '/app/Views/partials/field.php';
             ?>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Enllaç i imatge</legend>
+        <?php
+        $id = 'official_url'; $label = 'URL oficial de la score'; $type = 'url'; $value = $v($id); $error = $errors[$id] ?? null; $inputmode = 'url'; $maxlength = 255; $autocomplete = 'off';
+        $hint = 'Opcional. Només enllaços d\'osu!, per exemple https://osu.ppy.sh/scores/123456789';
+        require ROOT_PATH . '/app/Views/partials/field.php';
+
+        // Imatge actual (només en editar): ve de la BD de la score, mai del formulari
+        $currentImage = scoreImageUrl(isset($score) ? ($score['image_path'] ?? null) : null);
+        $imageError = $errors['image'] ?? null;
+        $imageDescribed = trim('image-hint' . ($imageError ? ' image-error' : ''));
+        ?>
+        <div class="field">
+            <label for="image">Imatge de fons de la targeta <span class="req">(opcional)</span></label>
+            <p class="hint" id="image-hint">JPEG, PNG o WebP, de màxim 5 MB. Es mostrarà de fons a la targeta, amb una capa fosca perquè el text es llegeixi bé.</p>
+            <?php if ($currentImage !== null): ?>
+                <div class="image-current">
+                    <img src="<?= e($currentImage) ?>" alt="Imatge actual de la targeta" width="160" height="90" loading="lazy">
+                    <div class="check">
+                        <input type="checkbox" id="remove_image" name="remove_image" value="1"<?= !empty($_POST['remove_image']) ? ' checked' : '' ?>>
+                        <label for="remove_image">Elimina la imatge actual</label>
+                    </div>
+                </div>
+                <p class="hint">Si en puges una de nova, substituirà l'actual.</p>
+            <?php endif; ?>
+            <input class="input" type="file" id="image" name="image" accept="image/jpeg,image/png,image/webp" data-image-input aria-describedby="<?= e($imageDescribed) ?>"<?= $imageError ? ' aria-invalid="true"' : '' ?>>
+            <?php if ($imageError): ?><p class="field-error" id="image-error"><?= e($imageError) ?></p><?php endif; ?>
+            <div class="image-preview" data-image-preview hidden>
+                <img src="" alt="Previsualització de la imatge seleccionada" width="320" height="180">
+            </div>
         </div>
     </fieldset>
 
@@ -97,4 +141,4 @@ $rankOptions = ['' => 'Tria un rang'] + array_combine(Score::RANKS, Score::RANKS
         <a class="btn" href="<?= e($cancelHref) ?>">Cancel·la</a>
     </div>
 </form>
-<?php unset($v, $dec, $rankOptions, $formAction, $values, $errors, $formError, $submitLabel, $cancelHref); ?>
+<?php unset($v, $dec, $rankOptions, $formAction, $values, $errors, $formError, $submitLabel, $cancelHref, $imageNote, $previewStars, $currentImage, $imageError, $imageDescribed); ?>
