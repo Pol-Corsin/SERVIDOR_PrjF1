@@ -25,6 +25,8 @@ require ROOT_PATH . '/app/Helpers/flash.php';
 require ROOT_PATH . '/app/Helpers/auth.php';
 require ROOT_PATH . '/app/Helpers/validation.php';
 require ROOT_PATH . '/app/Helpers/ownership.php';
+require ROOT_PATH . '/app/Helpers/stars.php';
+require ROOT_PATH . '/app/Helpers/upload.php';
 
 // Autoload senzill: busca la classe a Core, Models i Controllers
 spl_autoload_register(function (string $class): void {
