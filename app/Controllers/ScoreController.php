@@ -124,8 +124,14 @@ class ScoreController extends Controller
                     $this->redirect('/scores/' . $id);
                 }
             } catch (PDOException $e) {
-                deleteScoreImage($storedPath);
+                deleteScoreImage($storedPath);   // no deixem la imatge orfe
                 error_log('Crear score: ' . $e->getMessage());
+                // Clau forana: el compte de la sessió ja no existeix (cas poc probable després de validateSessionUser)
+                if ($e->getCode() === '23000' && str_contains($e->getMessage(), 'fk_scores_user')) {
+                    logoutUser();
+                    flash('error', 'El teu compte ja no existeix. Torna a iniciar sessió o registra\'t de nou.');
+                    $this->redirect('/login');
+                }
                 $formError = self::DB_ERROR;
                 $status = 500;
             }
