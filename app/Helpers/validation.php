@@ -77,6 +77,34 @@ function validateDecimal(mixed $raw, string $label, float $min, float $max): arr
 }
 
 /**
+ * Patró d'una URL oficial de score d'osu!: SEMPRE https, domini EXACTE osu.ppy.sh (ni subdominis ni
+ * "osu.ppy.sh.altra-web.com"), sense usuari@, port, paràmetres ni fragment, i camí /scores/<id> o /scores/<mode>/<id>.
+ * Es valida el text sencer amb una expressió regular estricta (no amb parse_url, que accepta coses estranyes).
+ */
+const OFFICIAL_SCORE_URL_PATTERN = '#^https://osu\.ppy\.sh/scores/(?:(osu|taiko|fruits|mania)/)?(\d{1,12})/?\z#i';   // \z: final absolut (amb $ passaria un salt de línia al final)
+
+/** És una URL oficial de score vàlida? (També es fa servir abans de MOSTRAR el botó, per si la BD tingués un valor dolent.) */
+function isOfficialScoreUrl(mixed $url): bool
+{
+    return is_string($url) && strlen($url) <= 255 && preg_match(OFFICIAL_SCORE_URL_PATTERN, $url) === 1;
+}
+
+/** URL oficial opcional. Retorna [url normalitzada|null, error|null]. Buit = sense URL. */
+function validateOfficialUrl(mixed $raw): array
+{
+    $value = trim((string) $raw);
+    if ($value === '') {
+        return [null, null];
+    }
+    if (!isOfficialScoreUrl($value)) {
+        return [null, 'Escriu una URL oficial de score d\'osu!, per exemple https://osu.ppy.sh/scores/123456789'];
+    }
+    preg_match(OFFICIAL_SCORE_URL_PATTERN, $value, $m);
+    // Es desa normalitzada (domini en minúscules, sense barra final)
+    return ['https://osu.ppy.sh/scores/' . (($m[1] ?? '') !== '' ? strtolower($m[1]) . '/' : '') . $m[2], null];
+}
+
+/**
  * Valida el formulari d'edició d'una score. NO accepta id, user_id ni created_at:
  * aquests camps no es poden modificar (el propietari surt sempre de la sessió).
  * Retorna [dades netes, errors per camp].
@@ -112,7 +140,7 @@ function validateScoreInput(array $post): array
     }
 
     $decimals = [
-        'star_rating' => ['Les estrelles', 0, 15],
+        'star_rating' => ['Les estrelles', 0, 10],
         'cs'          => ['El CS', 0, 10],
         'ar'          => ['L\'AR', 0, 10],
         'accuracy'    => ['La precisió', 0, 100],
@@ -129,6 +157,10 @@ function validateScoreInput(array $post): array
         $errors['rank_result'] = 'Tria un rang vàlid (SS, S, A, B, C o D).';
     }
     $clean['rank_result'] = $rank;
+
+    // URL oficial de la score (opcional)
+    [$clean['official_url'], $err] = validateOfficialUrl($post['official_url'] ?? '');
+    if ($err) { $errors['official_url'] = $err; }
 
     // Casella: si no ve marcada, no s'envia
     $clean['is_published'] = isset($post['is_published']) ? 1 : 0;
