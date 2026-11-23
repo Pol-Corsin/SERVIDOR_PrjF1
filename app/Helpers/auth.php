@@ -33,6 +33,26 @@ function loginUser(array $user): void
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32)); // token nou per a la sessió nova
 }
 
+/**
+ * Comprova que l'usuari de la sessió ENCARA EXISTEIX a la base de dades (una consulta per petició amb sessió).
+ * Si el compte ja no hi és (per exemple, perquè s'ha tornat a importar el SQL o s'ha esborrat l'usuari), la sessió
+ * s'invalida: si no, es provaria d'inserir scores amb un user_id inexistent i fallaria la clau forana (error 500).
+ * També manté el nom d'usuari de la sessió sincronitzat amb la BD.
+ */
+function validateSessionUser(): void
+{
+    if (!isLoggedIn()) {
+        return;
+    }
+    $name = User::usernameById((int) $_SESSION['user_id']);
+    if ($name === null) {
+        logoutUser();
+        flash('error', 'El teu compte ja no existeix (la base de dades s\'ha tornat a crear o s\'ha esborrat l\'usuari). Torna a iniciar sessió o registra\'t de nou.');
+        return;
+    }
+    $_SESSION['username'] = $name;
+}
+
 /** Tanca la sessió: esborra dades i cookie, i en crea una de buida per mostrar el missatge. */
 function logoutUser(): void
 {
