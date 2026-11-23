@@ -22,3 +22,7 @@ node_modules/
 references/score card exemple.png
 README.md
 *.md
+
+# Imatges pujades pels usuaris (no es pugen a Git; es conserva la carpeta i el .htaccess)
+public/uploads/scores/*
+!public/uploads/scores/.gitkeep
