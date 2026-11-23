@@ -13,6 +13,15 @@ class User
         return $row === false ? null : $row;
     }
 
+    /** Nom d'usuari actual d'un compte, o null si el compte ja no existeix (p. ex. si s'ha reimportat la base de dades). */
+    public static function usernameById(int $id): ?string
+    {
+        $stmt = Database::connection()->prepare('SELECT username FROM users WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $id]);
+        $name = $stmt->fetchColumn();
+        return $name === false ? null : (string) $name;
+    }
+
     public static function usernameExists(string $username): bool
     {
         $stmt = Database::connection()->prepare('SELECT 1 FROM users WHERE username = :u LIMIT 1');
