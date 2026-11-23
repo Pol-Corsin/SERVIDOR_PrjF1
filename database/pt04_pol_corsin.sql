@@ -61,6 +61,8 @@ CREATE TABLE scores (
   count_50        INT UNSIGNED  NOT NULL DEFAULT 0,
   count_miss      INT UNSIGNED  NOT NULL DEFAULT 0,
   rank_result     ENUM('SS','S','A','B','C','D') NOT NULL,
+  image_path      VARCHAR(255)  NULL DEFAULT NULL,       -- ruta relativa a public/ de la imatge de fons
+  official_url    VARCHAR(255)  NULL DEFAULT NULL,       -- URL oficial de la score a osu.ppy.sh
   is_published    TINYINT(1)    NOT NULL DEFAULT 1,
   created_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
