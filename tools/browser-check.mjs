@@ -280,6 +280,8 @@ console.log('\n== 7. Dificultat, imatges, URL oficial, paginació i fons animat 
 const PUBLIC_DIR = 'C:/xampp/htdocs/Practiques/reDAW2/PRACTIQUES/SERVIDOR_PrjF1/public/';
 const uploadsNow = () => readdirSync(PUBLIC_DIR + 'uploads/scores').filter((f) => f !== '.gitkeep').sort();
 const uploadsBefore = uploadsNow();
+// Nombre real de scores publicades (inclou les que hagi creat l'usuari): cap expectativa assumeix un nombre fix
+const PUB_TOTAL = Number(execSync('"C:/xampp/mysql/bin/mysql.exe" -u root -N -e "SELECT COUNT(*) FROM pt04_pol_corsin.scores WHERE is_published = 1"').toString().trim());
 const tmp7 = mkdtempSync(join(tmpdir(), 'cdp-img-'));
 
 // --- Imatges de prova generades pel mateix Chrome (captures de pàgines amb degradats): PNG, JPEG i WebP
@@ -399,8 +401,8 @@ await go(`/scores/${newId}/delete`); await submit();
 ok('Eliminar la score: s\'esborra la fila i la seva imatge del disc', (await body()).includes('Score eliminada') && !existsSync(PUBLIC_DIR + img3) && uploadsNow().join() === uploadsBefore.join());
 
 // 5b) Targeta compacta: una sola superfície, sense caixes interiors, alçada ajustada al contingut i jerarquia visual
-const LAYOUT_JS = `(() => {
-  const c = document.querySelector('.score'); const cr = c.getBoundingClientRect();
+const LAYOUT_JS = (sel) => `(() => {
+  const c = document.querySelector(${JSON.stringify(sel)}); const cr = c.getBoundingClientRect();
   const q = (s) => c.querySelector(s); const rect = (s) => q(s).getBoundingClientRect(); const fs = (s) => parseFloat(getComputedStyle(q(s)).fontSize);
   const id = rect('.score__id'), res = rect('.score__result'), foot = rect('.score__foot');
   // "Caixes": elements grans (més del 40 % de l'amplada i 50 px d'alt) amb fons propi dins la targeta
@@ -415,7 +417,7 @@ const LAYOUT_JS = `(() => {
 await setTheme('dark');
 for (const [w, maxH] of [[1280, 215], [768, 215], [390, 380]]) {
     await viewport(w); await go('/scores?per_page=4');
-    const L = await evalJs(LAYOUT_JS);
+    const L = await evalJs(LAYOUT_JS('.score:not(:has(.score__actions))'));
     ok(`Targeta compacta @${w}: alçada ajustada (${L.h}px ≤ ${maxH}px), sense alçades fixes, sense desbordament`, L.h <= maxH && L.fixedH === 0 && !L.overflowX, JSON.stringify(L));
     ok(`Targeta @${w}: una sola superfície (cap caixa interior amb fons propi, cap panell antic)`, L.boxes === 0 && L.panels === 0, `caixes=${L.boxes} panells=${L.panels}`);
     ok(`Targeta @${w}: ${w >= 640 ? 'rang+score a la dreta del títol (mateixa fila)' : 'rang+score sota la dificultat (apilats)'}; dades i jugador a sota`, (w >= 640 ? L.sideBySide : L.stacked) && L.footBelow, JSON.stringify({ s: L.sideBySide, st: L.stacked, f: L.footBelow }));
@@ -423,13 +425,13 @@ for (const [w, maxH] of [[1280, 215], [768, 215], [390, 380]]) {
     ok(`Targeta @${w}: conserva tota la informació (estrelles, CS/AR/BPM, rang, score, precisió, 4 cops + PP + combo, jugador amb #rang, PP i data)`, L.hasAll && L.statsN === 3 && L.hitsN === 6);
 }
 await viewport(1280); await go('/my-scores');
-const LA = await evalJs(LAYOUT_JS);
+const LA = await evalJs(LAYOUT_JS('.score'));
 ok(`Targeta amb accions (Edita/Elimina) @1280: continua compacta (${LA.h}px ≤ 260px) i sense caixes interiors`, LA.h <= 260 && LA.boxes === 0, JSON.stringify(LA));
 await viewport(390); await go('/my-scores');
-const LM = await evalJs(LAYOUT_JS);
+const LM = await evalJs(LAYOUT_JS('.score'));
 ok(`Targeta amb accions @390: sense desbordament i sense caixes (${LM.h}px)`, !LM.overflowX && LM.boxes === 0 && LM.h <= 420, JSON.stringify(LM));
 await shot('dark-card-compacta-mobil');
-await viewport(1280); await go('/'); const LH = await evalJs(LAYOUT_JS);
+await viewport(1280); await go('/'); const LH = await evalJs(LAYOUT_JS('.score'));
 ok('Targeta destacada de l\'inici: compacta i sense caixes interiors', LH.boxes === 0 && LH.panels === 0 && !LH.overflowX, JSON.stringify(LH));
 await setTheme('light'); await viewport(1280); await go('/scores?per_page=4'); await shot('light-card-compacta');
 await viewport(768); await go('/scores?per_page=2'); await shot('light-card-compacta-tauleta');
@@ -440,7 +442,7 @@ ok('La score de prova eliminada dóna 404 també a l\'edició', (await body()).i
 await setTheme('dark');
 await viewport(390, 900); await go('/scores?per_page=2&page=3');
 const pm = await evalJs(`(() => { const nav = document.querySelector('nav.pager'); return { numHidden: [...nav.querySelectorAll('.pager__num')].every((n) => getComputedStyle(n).display === 'none'), ctl: nav.querySelectorAll('.pager__ctl').length, current: nav.querySelector('[aria-current=page]').textContent.replace(/\\s+/g, ' ').trim(), sw: document.documentElement.scrollWidth, iw: innerWidth, label: nav.getAttribute('aria-label'), info: nav.querySelector('.pager__info').textContent.trim(), maxRight: Math.max(...[...nav.querySelectorAll('li')].filter((l) => l.offsetParent).map((l) => l.getBoundingClientRect().right)) }; })()`);
-ok('Paginació en mòbil (390 px): només Primera/Anterior/actual/Següent/Última, sense scroll horitzontal', pm.numHidden && pm.ctl === 4 && pm.current === 'Pàgina 3' && pm.sw <= pm.iw && pm.maxRight <= pm.iw && pm.label === 'Paginació' && pm.info === 'Pàgina 3 de 6.', JSON.stringify(pm));
+ok('Paginació en mòbil (390 px): només Primera/Anterior/actual/Següent/Última, sense scroll horitzontal', pm.numHidden && pm.ctl === 4 && pm.current === 'Pàgina 3' && pm.sw <= pm.iw && pm.maxRight <= pm.iw && pm.label === 'Paginació' && pm.info === `Pàgina 3 de ${Math.ceil(PUB_TOTAL / 2)}.`, JSON.stringify(pm));
 await shot('dark-paginacio-mobil');
 await viewport(1280, 900); await go('/scores?per_page=2&page=3');
 ok('Paginació a l\'escriptori: es veuen els números veïns (2, 3, 4)', await evalJs(`[...document.querySelectorAll('nav.pager li a')].map((a) => a.textContent.replace(/\\s+/g, ' ').trim()).join('|')`) === 'Primera|Anterior|Pàgina 2|Pàgina 3|Pàgina 4|Següent|Última');
