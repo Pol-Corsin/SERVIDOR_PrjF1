@@ -16,8 +16,8 @@
             <h2 id="h-detalls">Detalls</h2>
             <dl class="info-list">
                 <div><dt>Jugador</dt><dd><?= e($score['username']) ?></dd></div>
-                <div><dt>Publicada</dt><dd><time datetime="<?= e(date('Y-m-d', strtotime($score['created_at']))) ?>"><?= e(formatDate($score['created_at'])) ?></time></dd></div>
-                <div><dt>Última edició</dt><dd><time datetime="<?= e(date('Y-m-d', strtotime($score['updated_at']))) ?>"><?= e(formatDate($score['updated_at'])) ?></time></dd></div>
+                <div><dt>Data</dt><dd><time datetime="<?= e(date('Y-m-d', strtotime($score['created_at']))) ?>"><?= e(formatDate($score['created_at'])) ?></time></dd></div>
+                <div><dt>Editada</dt><dd><time datetime="<?= e(date('Y-m-d', strtotime($score['updated_at']))) ?>"><?= e(formatDate($score['updated_at'])) ?></time></dd></div>
             </dl>
         </section>
         <section class="panel" aria-labelledby="h-cops">

@@ -6,7 +6,8 @@ $sample = [
     'star_rating' => 5.31, 'bpm' => 180, 'cs' => 4, 'ar' => 9.2,
     'score' => 9876540, 'accuracy' => 97.42, 'pp' => 312.5, 'max_combo' => 1204,
     'count_300' => 1180, 'count_100' => 22, 'count_50' => 2, 'count_miss' => 1,
-    'rank_result' => 'S', 'is_published' => 1, 'created_at' => '2026-11-01 18:00:00', 'username' => 'demo_exemple', 'player_rank' => 1,
+    'rank_result' => 'S', 'image_path' => null, 'official_url' => 'https://osu.ppy.sh/scores/123456789',
+    'is_published' => 1, 'created_at' => '2026-11-01 18:00:00', 'username' => 'demo_exemple', 'player_rank' => 1, 'player_pp' => 312.5,
 ];
 $colors = [
     'Fons' => '#100d17', 'Targeta' => '#262136', 'Panell interior' => '#181421', 'Vora' => '#7a6fa6',
@@ -25,6 +26,16 @@ $colors = [
         <ul class="swatches">
             <?php foreach ($colors as $name => $hex): ?>
                 <li><i style="background: <?= e($hex) ?>"></i><strong><?= e($name) ?></strong><br><code><?= e($hex) ?></code></li>
+            <?php endforeach; ?>
+        </ul>
+    </section>
+
+    <section class="section" aria-labelledby="g-escala">
+        <h2 id="g-escala">Escala de dificultat</h2>
+        <p class="muted">El número i el contorn de les estrelles porten el color de l'escala (0 a 10). Els decimals s'interpolen entre colors veïns.</p>
+        <ul class="scale">
+            <?php foreach ([0, 1, 2, 3, 3.45, 4, 5, 5.8, 6, 7, 8, 9, 9.2, 10] as $n): ?>
+                <li><p class="stars" style="<?= e(starStyleAttr($n)) ?>"><span aria-hidden="true">★</span><?= e(formatStars($n)) ?><span class="visually-hidden"> estrelles</span></p></li>
             <?php endforeach; ?>
         </ul>
     </section>

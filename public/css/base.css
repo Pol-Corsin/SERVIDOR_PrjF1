@@ -24,7 +24,8 @@
    un bloc entre @media i un selector d'atribut). tools/tests.php comprova que són idèntics.
    ============================================================ */
 :root,
-:root[data-theme="dark"] {
+:root[data-theme="dark"],
+.score--has-image {
     color-scheme: dark;
     /* Superfícies: la targeta (més clara) conté panells interiors (més foscos), com a la referència */
     --bg: #100d17;
@@ -32,7 +33,6 @@
     --well: #181421;
     --line: #7a6fa6;            /* vora de camps i botons: ≥ 3:1 (WCAG 1.4.11) */
     --line-soft: #3b3458;       /* només decoratiu */
-    --grid: rgb(255 255 255 / .025);
 
     --text: #f4f1fb;
     --muted: #bab1d4;
@@ -56,6 +56,11 @@
     --rank-b: #4fd6ff;  --rank-c: #c9a2ff; --rank-d: #ff8a8a;
 
     --avatar-ink: #14111c;
+
+    /* Fons animat: taques MOLT suaus i de baixa opacitat (RGB + alfa) */
+    --glow-1: rgb(120 84 190 / .14);
+    --glow-2: rgb(190 80 140 / .09);
+    --glow-3: rgb(70 110 190 / .11);
 }
 
 @media (prefers-color-scheme: light) {
@@ -66,28 +71,31 @@
         --well: #ede8f6;
         --line: #6a5f94;
         --line-soft: #d3cce4;
-        --grid: rgb(40 30 80 / .045);
-
+    
         --text: #1c1630;
         --muted: #4e4569;
 
-        --pink: #c81e6a;
-        --pink-hover: #a3125a;
+        --pink: #b3175c;
+        --pink-hover: #8f0f4b;
         --pink-ink: #ffffff;
         --gold: #8a5a00;
         --focus: #2b1fb8;
         --link: #0b5cad;
-        --success: #1a7a3c;
+        --success: #166b38;
         --danger: #b3261e;
         --info: #0b5cad;
         --acc: #5e4f00;
 
-        --hit-300: #0a6a96; --hit-100: #1a7a3c; --hit-50: #8a5a00; --hit-miss: #b3261e;
+        --hit-300: #0a6a96; --hit-100: #166b38; --hit-50: #8a5a00; --hit-miss: #b3261e;
 
-        --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #1a7a3c;
+        --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #166b38;
         --rank-b: #0a6a96;  --rank-c: #6b3fb5; --rank-d: #b3261e;
 
         --avatar-ink: #14111c;
+
+        --glow-1: rgb(150 120 220 / .11);
+        --glow-2: rgb(240 140 190 / .07);
+        --glow-3: rgb(110 160 235 / .09);
     }
 }
 
@@ -98,28 +106,31 @@
     --well: #ede8f6;
     --line: #6a5f94;
     --line-soft: #d3cce4;
-    --grid: rgb(40 30 80 / .045);
 
     --text: #1c1630;
     --muted: #4e4569;
 
-    --pink: #c81e6a;
-    --pink-hover: #a3125a;
+    --pink: #b3175c;
+    --pink-hover: #8f0f4b;
     --pink-ink: #ffffff;
     --gold: #8a5a00;
     --focus: #2b1fb8;
     --link: #0b5cad;
-    --success: #1a7a3c;
+    --success: #166b38;
     --danger: #b3261e;
     --info: #0b5cad;
     --acc: #5e4f00;
 
-    --hit-300: #0a6a96; --hit-100: #1a7a3c; --hit-50: #8a5a00; --hit-miss: #b3261e;
+    --hit-300: #0a6a96; --hit-100: #166b38; --hit-50: #8a5a00; --hit-miss: #b3261e;
 
-    --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #1a7a3c;
+    --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #166b38;
     --rank-b: #0a6a96;  --rank-c: #6b3fb5; --rank-d: #b3261e;
 
     --avatar-ink: #14111c;
+
+    --glow-1: rgb(150 120 220 / .11);
+    --glow-2: rgb(240 140 190 / .07);
+    --glow-3: rgb(110 160 235 / .09);
 }
 
 /* Tokens que no depenen del tema */
@@ -131,6 +142,10 @@
     --r-card: 1.125rem;
     --r-panel: .75rem;
 
+    /* Targeta amb imatge de fons: capa fosca global i panells interiors semitransparents */
+    --img-overlay: rgb(16 13 23 / .68);
+    --img-panel: rgb(24 20 33 / .78);
+
     --font: "Nunito", ui-rounded, system-ui, "Segoe UI", sans-serif;
 }
 
@@ -140,11 +155,8 @@ html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
 body {
     margin: 0; min-height: 100vh; display: flex; flex-direction: column;
     background-color: var(--bg);
-    /* "Beat grid": només una rejilla molt subtil */
-    background-image:
-        linear-gradient(var(--grid) 1px, transparent 1px),
-        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-    background-size: 2.5rem 2.5rem;
+    position: relative;
+    isolation: isolate;     /* les capes del fons (z-index:-1) queden darrere del contingut però davant del color de fons */
     color: var(--text);
     font: 1.0625rem/1.6 var(--font);
 }
@@ -199,4 +211,41 @@ a:hover { color: var(--text); }
 
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ============================================================
+   FONS ANIMAT: taques suaus de colors apagats (vidre esmerilat / llum ambiental)
+   - Dues capes fixes amb degradats radials molt difusos i de baixa opacitat (sense vores dures).
+   - Només animen `transform` (compost a la GPU, sense repintar) i molt a poc a poc (80 s i 110 s).
+   - Sempre per darrere del contingut i sense interceptar clics.
+   - Amb prefers-reduced-motion el moviment s'atura (regla global de més amunt); queden com a fons estàtic.
+   ============================================================ */
+body::before,
+body::after {
+    content: "";
+    position: fixed;
+    inset: -25%;
+    z-index: -1;
+    pointer-events: none;
+    will-change: transform;
+}
+body::before {
+    background:
+        radial-gradient(42% 36% at 24% 30%, var(--glow-1), transparent 72%),
+        radial-gradient(34% 30% at 78% 72%, var(--glow-2), transparent 72%);
+    animation: glow-a 80s ease-in-out infinite alternate;
+}
+body::after {
+    background:
+        radial-gradient(38% 34% at 72% 24%, var(--glow-3), transparent 72%),
+        radial-gradient(32% 28% at 18% 82%, var(--glow-1), transparent 72%);
+    animation: glow-b 110s ease-in-out infinite alternate;
+}
+@keyframes glow-a {
+    from { transform: translate3d(-3%, -2%, 0) scale(1); }
+    to   { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+@keyframes glow-b {
+    from { transform: translate3d(3%, 2%, 0) rotate(0deg) scale(1); }
+    to   { transform: translate3d(-4%, -3%, 0) rotate(6deg) scale(1.06); }
 }

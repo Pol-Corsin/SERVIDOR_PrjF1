@@ -144,92 +144,96 @@ legend { padding: 0; margin-bottom: var(--s3); font-size: 1.25rem; font-weight: 
 .breadcrumb li + li::before { content: "/"; margin-right: var(--s2); }
 
 /* ============================================================
-   TARGETA DE SCORE (inspirada en references/score card exemple.png)
-   Quatre panells interiors: beatmap, dificultat, resultat i jugador.
+   TARGETA DE SCORE: UN sol component compacte (sense caixes interiors)
+   Fila principal: títol / artista / mapper / dificultat + CS AR BPM    |    rang + score + precisió
+   Fila de dades : cops + PP + combo                                    |    jugador (avatar, nom, #rang, PP, data)
+   Fila d'accions: Official score                                       |    Edita, Elimina   (només si n'hi ha)
+   Les files se separen amb una línia fina; la targeta s'adapta al seu contingut (cap alçada fixa).
    ============================================================ */
-.score-list { display: grid; gap: var(--s4); list-style: none; margin: 0; padding: 0; }
+.score-list { display: grid; gap: var(--s3); list-style: none; margin: 0; padding: 0; }
 
 .score {
-    position: relative; display: grid; gap: .625rem; padding: .625rem;
+    position: relative; display: grid; gap: .6rem; padding: .85rem 1rem;
     background: var(--card); border: 2px solid var(--line-soft); border-radius: var(--r-card);
 }
 .score:hover { border-color: var(--line); }
 .score:focus-within { border-color: var(--focus); }
-/* Foco amb teclat al títol: contorn de 3 px a TOTA la targeta (el contorn del propi enllaç s'amaga perquè és minúscul i l'enllaç ocupa la targeta sencera) */
+/* Foco amb teclat al títol: contorn de 3 px a TOTA la targeta (el contorn del propi enllaç s'amaga perquè l'enllaç ocupa la targeta sencera) */
 .score:has(.score__title a:focus-visible) { outline: 3px solid var(--focus); outline-offset: 3px; }
 .score--featured { border: 3px solid var(--gold); }     /* l'únic contorn daurat: la score destacada */
-.score__panel { background: var(--well); border-radius: var(--r-panel); padding: var(--s3) var(--s4); min-width: 0; }
 
-@media (min-width: 46rem) {
-    .score { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
-}
+/* ---------- Fila principal ---------- */
+.score__main { display: grid; gap: .55rem var(--s5); align-items: start; }
+@media (min-width: 40rem) { .score__main { grid-template-columns: minmax(0, 1fr) auto; } }
 
-/* Panell 1: beatmap */
-.score__map { display: flex; flex-direction: column; justify-content: center; gap: var(--s1); }
-.score__title { margin: 0; font-size: 1.5rem; line-height: 1.15; overflow-wrap: anywhere; }
+.score__id { min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.score__title { margin: 0; font-size: clamp(1.25rem, 1.05rem + .8vw, 1.5rem); line-height: 1.15; overflow-wrap: anywhere; }
 .score__title a { color: var(--text); text-decoration: none; }
 .score__title a::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-card); }   /* tota la targeta és clicable */
 .score__title a:focus-visible { outline: none; }
-.score__by, .score__mapper { margin: 0; color: var(--muted); }
-.score__by b, .score__mapper b { color: var(--text); font-weight: 800; }
+.score__credits { display: flex; flex-wrap: wrap; gap: 0 var(--s4); margin: 0; color: var(--muted); font-size: .9375rem; }
+.score__credits b { color: var(--text); font-weight: 800; }
 
-/* Panell 2: dificultat */
-.score__diff { display: flex; flex-direction: column; justify-content: center; gap: var(--s2); }
-.score__diff-top { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
-.stars {
-    display: inline-flex; align-items: center; gap: .3rem; margin: 0; padding: .15rem .7rem;
-    border: 2px solid var(--gold); border-radius: 999px; color: var(--gold); font-weight: 900; font-variant-numeric: tabular-nums;
-}
-.score__diff-name { margin: 0; font-weight: 900; font-size: 1.125rem; overflow-wrap: anywhere; }
-.diff-stats { display: flex; gap: var(--s4); margin: 0; color: var(--muted); font-size: .9375rem; }
-.diff-stats div { display: flex; gap: var(--s1); }
+/* Dificultat enganxada a la informació del beatmap: pastilla + nom + CS/AR/BPM en una sola línia */
+.score__diff { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem var(--s3); margin-top: .3rem; }
+.score__diff-name { margin: 0; font-weight: 900; overflow-wrap: anywhere; }
+.diff-stats { display: flex; flex-wrap: wrap; gap: 0 var(--s3); margin: 0; color: var(--muted); font-size: .875rem; }
+.diff-stats div { display: flex; gap: .25rem; }
 .diff-stats dt::after { content: ":"; }
 .diff-stats dd { margin: 0; color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
 
-/* Panell 3: resultat */
-.score__result { display: grid; gap: var(--s3); }
-.score__result-top { display: flex; align-items: center; gap: var(--s3); }
+/* Resultat: rang + score gran + precisió (el més visible de la targeta) */
+.score__result { display: flex; align-items: center; gap: var(--s3); }
+@media (min-width: 40rem) { .score__result { justify-content: flex-end; } }
 .rank {
     --rank-color: var(--muted);
-    flex: none; display: grid; place-items: center; width: 4.25rem; height: 4.25rem; margin: 0;
-    border: 2px solid var(--rank-color); border-radius: var(--r-panel); background: var(--card);
-    color: var(--rank-color); font-weight: 900; font-size: 2.125rem; line-height: 1; letter-spacing: -.04em;
+    flex: none; display: grid; place-items: center; width: 3.25rem; height: 3.25rem; margin: 0;
+    border: 2px solid var(--rank-color); border-radius: var(--r-panel); background: var(--well);
+    color: var(--rank-color); font-weight: 900; font-size: 1.75rem; line-height: 1; letter-spacing: -.04em;
 }
-.rank--sm { width: 3rem; height: 3rem; font-size: 1.5rem; }
 .rank-ss { --rank-color: var(--rank-ss); } .rank-s { --rank-color: var(--rank-s); } .rank-a { --rank-color: var(--rank-a); }
 .rank-b { --rank-color: var(--rank-b); }   .rank-c { --rank-color: var(--rank-c); } .rank-d { --rank-color: var(--rank-d); }
 
-.score__numbers { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
-.acc { margin: 0; padding: .15rem .7rem; background: var(--card); border-radius: 999px; font-weight: 900; color: var(--acc); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.points { margin: 0; font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.125rem); line-height: 1; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.score__numbers { display: flex; flex-direction: column; align-items: flex-start; gap: .25rem; min-width: 0; }
+@media (min-width: 40rem) { .score__numbers { align-items: flex-end; } }
+.points { margin: 0; font-size: clamp(1.75rem, 1.3rem + 1.8vw, 2.25rem); line-height: 1; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.acc { margin: 0; padding: 0 .65rem; background: var(--well); border-radius: 999px; font-weight: 900; color: var(--acc); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-.hits { display: flex; flex-wrap: wrap; gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+/* ---------- Fila de dades: cops, PP, combo i jugador ---------- */
+.score__foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem var(--s4);
+    padding-top: .6rem; border-top: 1px solid var(--line-soft);
+}
+.hits { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; margin: 0; padding: 0; }
 .hit {
-    display: inline-flex; align-items: baseline; gap: .4rem; padding: .2rem .75rem; background: var(--card); border-radius: 999px;
-    font-weight: 900; font-variant-numeric: tabular-nums; color: var(--c, var(--text));
+    display: inline-flex; align-items: baseline; gap: .35rem; padding: 0 .6rem; background: var(--well); border-radius: 999px;
+    font-size: .9375rem; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--c, var(--text));
 }
 .hit__l { font-size: .75rem; font-weight: 800; color: var(--muted); }
 .hit--300 { --c: var(--hit-300); } .hit--100 { --c: var(--hit-100); } .hit--50 { --c: var(--hit-50); } .hit--miss { --c: var(--hit-miss); }
 .hit--plain { --c: var(--text); }
 .hit--pp { --c: var(--pink); }
 
-/* Panell 4: jugador */
-.score__player { display: flex; align-items: center; gap: var(--s3); }
+/* Jugador: bloc petit i secundari */
+.score__player { flex: 0 1 auto; display: flex; align-items: center; gap: .6rem; min-width: 0; }
 .avatar {
     --tone: var(--line);
-    flex: none; display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: var(--r-panel);
-    background: var(--tone); color: var(--avatar-ink); font-weight: 900; font-size: 1.5rem;
+    flex: none; display: grid; place-items: center; width: 2.25rem; height: 2.25rem; margin: 0; border-radius: .5rem;
+    background: var(--tone); color: var(--avatar-ink); font-weight: 900; font-size: 1.0625rem; line-height: 1;
 }
 .tone-0 { --tone: #ff5ca8; } .tone-1 { --tone: #4fd6ff; } .tone-2 { --tone: #6be28c; }
 .tone-3 { --tone: #c9a2ff; } .tone-4 { --tone: #ffd43b; } .tone-5 { --tone: #ff9a5c; }
 .avatar--sm { width: 2.25rem; height: 2.25rem; font-size: 1.0625rem; border-radius: .5rem; }
 .score__player-text { min-width: 0; }
-.score__player-name { margin: 0; font-weight: 900; font-size: 1.125rem; overflow-wrap: anywhere; }
-.score__player-meta { margin: 0; color: var(--muted); font-size: .9375rem; }
+.score__player-name { margin: 0; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.score__player-meta { display: flex; flex-wrap: wrap; gap: 0 .6rem; margin: 0; color: var(--muted); font-size: .8125rem; line-height: 1.3; }
+.player-rank { color: var(--text); font-weight: 900; }
+.player-pp, .player-date { font-variant-numeric: tabular-nums; }
 
-.score__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; justify-content: space-between; padding: 0 var(--s2); }
+/* ---------- Fila d'accions ---------- */
+.score__actions { display: flex; flex-wrap: wrap; gap: .4rem var(--s3); align-items: center; justify-content: space-between; padding-top: .5rem; border-top: 1px solid var(--line-soft); }
 .score__actions .btn { position: relative; z-index: 1; }    /* per sobre de l'enllaç que cobreix la targeta */
-.badge-draft { margin: 0; padding: .15rem .7rem; border: 2px dashed var(--line); border-radius: 999px; font-weight: 800; font-size: .875rem; color: var(--muted); }
+.badge-draft { margin: 0; padding: .1rem .7rem; border: 2px dashed var(--line); border-radius: 999px; font-weight: 800; font-size: .875rem; color: var(--muted); }
 
 /* ---------- Peu ---------- */
 .site-footer { border-top: 2px solid var(--line-soft); padding-block: var(--s5); color: var(--muted); font-size: .9375rem; }
@@ -252,3 +256,75 @@ legend { padding: 0; margin-bottom: var(--s3); font-size: 1.25rem; font-weight: 
 .score__actions-group { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .confirm { text-align: left; }
 .confirm .score { margin: var(--s4) 0 var(--s5); }
+/* ============================================================
+   DIFICULTAT: pastilla d'estrelles amb el color de l'escala 0-10
+   --star (color del número i del contorn) i --star-fill (fons de la pastilla) els posa el servidor
+   (helper stars.php) i el JS a la previsualització del formulari. El fons es tria clar o fosc segons quin
+   doni més contrast, així es llegeix igual als dos temes. El número és gran i en negreta (text gran WCAG).
+   ============================================================ */
+.stars {
+    display: inline-flex; align-items: center; gap: .3rem; margin: 0; padding: .05rem .85rem;
+    border: 2px solid var(--star, var(--gold)); border-radius: 999px;
+    color: var(--star, var(--gold)); background: var(--star-fill, transparent);
+    font-size: 1.25rem; line-height: 1.35; font-weight: 900; font-variant-numeric: tabular-nums;
+}
+.stars--preview { margin-bottom: var(--s2); }
+.scale { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+.scale li { display: flex; }
+
+/* ============================================================
+   TARGETA AMB IMATGE DE FONS
+   La targeta amb imatge usa els tokens del tema FOSC (vegeu base.css, selector .score--has-image):
+   el text és sempre clar sobre fosc, amb independència del tema de la pàgina i de la imatge.
+   Capa fosca moderada sobre la imatge + panells interiors semitransparents: la imatge es reconeix però no molesta.
+   ============================================================ */
+.score--has-image {
+    --muted: #e2dcf2;                       /* text secundari una mica més clar: es llegeix amb qualsevol imatge */
+    color: var(--text);
+    background-color: var(--card);
+    background-image: linear-gradient(var(--img-overlay), var(--img-overlay)), var(--card-image);
+    background-size: cover;
+    background-position: center;
+}
+/* Sense caixes interiors: només una capa fosca contínua sobre la imatge. Les pastilles (cops, rang, precisió) tenen fons propi
+   i els botons també, perquè es llegeixin sobre qualsevol imatge. */
+.score--has-image .btn { background: var(--img-panel); }
+.score--has-image .score__foot, .score--has-image .score__actions { border-top-color: rgb(255 255 255 / .2); }
+
+/* ---------- Botó "Official score" ---------- */
+.btn--official { border-color: var(--link); color: var(--link); }
+.btn--official:hover { border-color: var(--link); color: var(--link); background: var(--well); }
+.btn--official svg { width: 1rem; height: 1rem; flex: none; }
+
+/* ---------- Formulari: imatge i previsualització ---------- */
+.input[type="file"] { padding: .5rem; cursor: pointer; }
+.input[type="file"]::file-selector-button {
+    margin-right: var(--s3); padding: .4rem .9rem; border: 2px solid var(--line); border-radius: .5rem;
+    background: var(--card); color: var(--text); font: inherit; font-weight: 800; cursor: pointer;
+}
+.image-current { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s4); margin-bottom: var(--s3); }
+.image-current img, .image-preview img { display: block; max-width: 100%; height: auto; border-radius: var(--r-panel); border: 2px solid var(--line-soft); object-fit: cover; }
+.image-current img { width: 10rem; aspect-ratio: 16 / 9; }
+.image-current .check { margin: 0; }
+.image-preview { margin-top: var(--s3); }
+.image-preview[hidden] { display: none; }
+.image-preview img { width: min(100%, 20rem); aspect-ratio: 16 / 9; }
+
+/* ---------- Paginació: Primera / Anterior / números / Següent / Última ---------- */
+.pager ul { justify-content: flex-start; }
+.pager li { margin: 0; }
+/* Mòbil: es veuen Primera, Anterior, la pàgina actual, Següent i Última; els números de les pàgines veïnes s'amaguen */
+@media (max-width: 35.99rem) {
+    .pager__num { display: none; }
+    .pager a, .pager span.pager__gap { min-width: 2.5rem; padding: 0 var(--s2); }
+}
+
+
+/* El atribut hidden ha de guanyar a display:flex (si no, un avís buit mostraria només la icona ⚠) */
+.field-error[hidden] { display: none; }
+
+/* Paginació en mòbil: botons més compactes perquè els 5 controls càpiguen en una sola fila a 390 px */
+@media (max-width: 35.99rem) {
+    .pager ul { gap: var(--s1); }
+    .pager a, .pager span.pager__gap { min-width: 2.5rem; padding: 0 .5rem; font-size: .9375rem; }
+}
