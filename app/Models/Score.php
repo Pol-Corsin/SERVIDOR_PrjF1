@@ -8,8 +8,9 @@ class Score
     /** Rangs vàlids (coincideixen amb l'ENUM de la BD). */
     public const RANKS = ['SS', 'S', 'A', 'B', 'C', 'D'];
 
-    /** Scores per pàgina al llistat. */
-    public const PER_PAGE = 6;
+    /** Scores per pàgina del llistat: valors permesos i valor per defecte. */
+    public const PAGE_SIZES = [2, 4, 6, 10];
+    public const DEFAULT_PER_PAGE = 6;
 
     /** Màxim de scores per usuari (evita que algú ompli la base de dades). */
     public const MAX_PER_USER = 100;
@@ -28,10 +29,11 @@ class Score
      */
     private const SELECT = 's.id, s.user_id, s.beatmap_title, s.artist, s.difficulty_name, s.mapper,
         s.star_rating, s.bpm, s.cs, s.ar, s.score, s.accuracy, s.pp, s.max_combo,
-        s.count_300, s.count_100, s.count_50, s.count_miss, s.rank_result, s.is_published,
+        s.count_300, s.count_100, s.count_50, s.count_miss, s.rank_result, s.image_path, s.official_url, s.is_published,
         s.created_at, s.updated_at, u.username,
         (SELECT COUNT(*) + 1 FROM (SELECT user_id, SUM(pp) AS total FROM scores WHERE is_published = 1 GROUP BY user_id) t
-          WHERE t.total > (SELECT COALESCE(SUM(pp), 0) FROM scores WHERE is_published = 1 AND user_id = s.user_id)) AS player_rank';
+          WHERE t.total > (SELECT COALESCE(SUM(pp), 0) FROM scores WHERE is_published = 1 AND user_id = s.user_id)) AS player_rank,
+        (SELECT COALESCE(SUM(pp), 0) FROM scores WHERE is_published = 1 AND user_id = s.user_id) AS player_pp';
 
     private const FROM = ' FROM scores s INNER JOIN users u ON u.id = s.user_id ';
 
@@ -53,8 +55,9 @@ class Score
     }
 
     /** Una pàgina de scores publicades, amb ordenació i filtre de rang (valors desconeguts s'ignoren). */
-    public static function listPublished(string $sort = 'recent', ?string $rank = null, int $page = 1): array
+    public static function listPublished(string $sort = 'recent', ?string $rank = null, int $page = 1, int $perPage = self::DEFAULT_PER_PAGE): array
     {
+        $perPage = in_array($perPage, self::PAGE_SIZES, true) ? $perPage : self::DEFAULT_PER_PAGE;
         $orderBy = (self::SORTS[$sort] ?? self::SORTS['recent'])['sql'];
         [$where, $params] = self::rankFilter($rank);
         $sql = 'SELECT ' . self::SELECT . self::FROM . 'WHERE s.is_published = 1' . $where
@@ -64,8 +67,8 @@ class Score
         foreach ($params as $k => $v) {
             $stmt->bindValue($k, $v);
         }
-        $stmt->bindValue(':limit', self::PER_PAGE, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', max(0, $page - 1) * self::PER_PAGE, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', max(0, $page - 1) * $perPage, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
@@ -133,7 +136,7 @@ class Score
                     mapper = :mapper, star_rating = :star_rating, bpm = :bpm, cs = :cs, ar = :ar,
                     score = :score, accuracy = :accuracy, pp = :pp, max_combo = :max_combo,
                     count_300 = :count_300, count_100 = :count_100, count_50 = :count_50, count_miss = :count_miss,
-                    rank_result = :rank_result, is_published = :is_published
+                    rank_result = :rank_result, image_path = :image_path, official_url = :official_url, is_published = :is_published
                 WHERE id = :id AND user_id = :uid';
         $stmt = Database::connection()->prepare($sql);
         $stmt->execute([
@@ -141,7 +144,8 @@ class Score
             ':mapper' => $d['mapper'], ':star_rating' => $d['star_rating'], ':bpm' => $d['bpm'], ':cs' => $d['cs'], ':ar' => $d['ar'],
             ':score' => $d['score'], ':accuracy' => $d['accuracy'], ':pp' => $d['pp'], ':max_combo' => $d['max_combo'],
             ':count_300' => $d['count_300'], ':count_100' => $d['count_100'], ':count_50' => $d['count_50'], ':count_miss' => $d['count_miss'],
-            ':rank_result' => $d['rank_result'], ':is_published' => $d['is_published'],
+            ':rank_result' => $d['rank_result'], ':image_path' => $d['image_path'], ':official_url' => $d['official_url'],
+            ':is_published' => $d['is_published'],
             ':id' => $id, ':uid' => $userId,
         ]);
         return $stmt->rowCount();
@@ -162,9 +166,9 @@ class Score
     public static function create(int $userId, array $d): int
     {
         $sql = 'INSERT INTO scores (user_id, beatmap_title, artist, difficulty_name, mapper, star_rating, bpm, cs, ar,
-                    score, accuracy, pp, max_combo, count_300, count_100, count_50, count_miss, rank_result, is_published)
+                    score, accuracy, pp, max_combo, count_300, count_100, count_50, count_miss, rank_result, image_path, official_url, is_published)
                 VALUES (:uid, :beatmap_title, :artist, :difficulty_name, :mapper, :star_rating, :bpm, :cs, :ar,
-                    :score, :accuracy, :pp, :max_combo, :count_300, :count_100, :count_50, :count_miss, :rank_result, :is_published)';
+                    :score, :accuracy, :pp, :max_combo, :count_300, :count_100, :count_50, :count_miss, :rank_result, :image_path, :official_url, :is_published)';
         $pdo = Database::connection();
         $stmt = $pdo->prepare($sql);
         $stmt->execute([
@@ -173,7 +177,8 @@ class Score
             ':mapper' => $d['mapper'], ':star_rating' => $d['star_rating'], ':bpm' => $d['bpm'], ':cs' => $d['cs'], ':ar' => $d['ar'],
             ':score' => $d['score'], ':accuracy' => $d['accuracy'], ':pp' => $d['pp'], ':max_combo' => $d['max_combo'],
             ':count_300' => $d['count_300'], ':count_100' => $d['count_100'], ':count_50' => $d['count_50'], ':count_miss' => $d['count_miss'],
-            ':rank_result' => $d['rank_result'], ':is_published' => $d['is_published'],
+            ':rank_result' => $d['rank_result'], ':image_path' => $d['image_path'], ':official_url' => $d['official_url'],
+            ':is_published' => $d['is_published'],
         ]);
         return (int) $pdo->lastInsertId();
     }
