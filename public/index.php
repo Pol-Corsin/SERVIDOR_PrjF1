@@ -43,6 +43,7 @@ try {
     $config = require ROOT_PATH . '/config/config.php';
     Database::configure($config['db']);
     Session::start($config['session']);
+    validateSessionUser();   // si el compte de la sessió ja no existeix a la BD, la sessió s'invalida
 
     // Capçaleres de seguretat bàsiques
     header('X-Content-Type-Options: nosniff');
