@@ -1,0 +1,254 @@
+/* Autor: Pol Corsin — PT04 osu! Scores
+   COMPONENTS: capçalera, botons, xips, paginació, formularis, alertes, estat buit, targeta de score. */
+
+/* ---------- Capçalera ---------- */
+.site-header { background: var(--bg); border-bottom: 2px solid var(--line-soft); position: sticky; top: 0; z-index: 50; }
+.header-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s5); padding-block: var(--s2); }
+
+.brand { display: inline-flex; align-items: center; gap: var(--s2); color: var(--text); font-weight: 900; font-size: 1.375rem; letter-spacing: -.02em; text-decoration: none; }
+.brand:hover { color: var(--text); }
+.brand svg { width: 2rem; height: 2rem; flex: none; }
+.brand span { color: var(--pink); }
+
+.nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s5); flex: 1; justify-content: flex-end; }
+.nav-list { display: flex; flex-wrap: wrap; gap: 0 var(--s4); list-style: none; margin: 0; padding: 0; }
+.nav-list a { display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--text); font-weight: 700; text-decoration: none; border-bottom: 3px solid transparent; }
+.nav-list a:hover { border-bottom-color: var(--line); color: var(--text); }
+.nav-list a[aria-current="page"] { border-bottom-color: var(--pink); }   /* pàgina actual: barra, no només color */
+
+.nav-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.nav-actions form { margin: 0; }
+.who { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 800; }
+
+.btn.nav-toggle { display: none; }
+@media (max-width: 47.99rem) {
+    .js .btn.nav-toggle { display: inline-flex; }
+    .js .nav { display: none; width: 100%; flex-direction: column; align-items: stretch; padding-bottom: var(--s3); }
+    .js .nav[data-open="true"] { display: flex; }
+    .nav-list { flex-direction: column; }
+    .nav-actions { align-items: stretch; }
+    .nav-actions .btn { flex: 1; }
+}
+
+/* ---------- Botons ---------- */
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+    min-height: 2.75rem; padding: .55rem 1.25rem;
+    border: 2px solid var(--line); border-radius: var(--r-panel);
+    background: transparent; color: var(--text);
+    font: inherit; font-weight: 800; text-decoration: none; cursor: pointer;
+}
+.btn:hover { border-color: var(--text); color: var(--text); background: var(--card); }
+.btn:active { transform: scale(.97); }
+.btn--primary { background: var(--pink); border-color: var(--pink); color: var(--pink-ink); }
+.btn--primary:hover { background: var(--pink-hover); border-color: var(--pink-hover); color: var(--pink-ink); }
+.btn--block { width: 100%; }
+.btn--sm { min-height: 2.5rem; padding: .35rem .9rem; font-size: .9375rem; }
+.btn--danger { border-color: var(--danger); color: var(--danger); }
+.btn--danger:hover { border-color: var(--danger); color: var(--danger); background: var(--well); }
+.btn[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* ---------- Xips (ordenar / filtrar) ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+.chip {
+    display: inline-flex; align-items: center; gap: var(--s1); min-height: 2.5rem; padding: .3rem .95rem;
+    border: 2px solid var(--line); border-radius: 999px; background: var(--well);
+    color: var(--text); text-decoration: none; font-weight: 700; font-size: .9375rem;
+}
+.chip:hover { border-color: var(--text); color: var(--text); }
+.chip[aria-current="true"] { border-color: var(--gold); background: var(--card); color: var(--gold); }
+.chip[aria-current="true"]::before { content: "✓"; font-weight: 900; }   /* no només color (1.4.1) */
+
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--s4) var(--s6); margin-bottom: var(--s5); }
+.toolbar > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.toolbar p { margin: 0; color: var(--muted); font-weight: 700; }
+
+/* ---------- Paginació ---------- */
+.pager { margin-top: var(--s6); }
+.pager ul { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+.pager a, .pager span.pager__gap {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 2.75rem; min-height: 2.75rem; padding: 0 var(--s3);
+    border: 2px solid var(--line); border-radius: var(--r-panel); background: var(--well);
+    color: var(--text); font-weight: 800; text-decoration: none; font-variant-numeric: tabular-nums;
+}
+.pager a:hover { border-color: var(--text); color: var(--text); }
+.pager a[aria-current="page"] { border-color: var(--gold); color: var(--gold); background: var(--card); }
+.pager .is-disabled { opacity: .5; border-style: dashed; }
+.pager__info { margin: var(--s3) 0 0; color: var(--muted); }
+
+/* ---------- Targeta de formulari ---------- */
+.panel { background: var(--card); border: 2px solid var(--line-soft); border-radius: var(--r-card); padding: var(--s5); }
+@media (min-width: 40rem) { .panel { padding: var(--s6); } }
+
+.field { margin-bottom: var(--s4); }
+.field label, .field .label { display: block; margin-bottom: var(--s1); font-weight: 800; }
+.field .hint { margin: 0 0 var(--s2); font-size: .9375rem; color: var(--muted); }
+.field .req { color: var(--muted); font-weight: 400; font-size: .875rem; }
+.input {
+    display: block; width: 100%; min-height: 2.875rem; padding: .55rem .85rem;
+    background: var(--well); color: var(--text);
+    border: 2px solid var(--line); border-radius: var(--r-panel);
+    font: inherit;
+}
+select.input { appearance: auto; }
+.input:hover { border-color: var(--text); }
+.input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-color: var(--text); }
+.input[aria-invalid="true"] { border-color: var(--danger); border-width: 3px; }
+.field-error { display: flex; gap: var(--s2); margin: var(--s2) 0 0; color: var(--danger); font-weight: 700; font-size: .9375rem; }
+.field-error::before { content: "⚠"; flex: none; }   /* icona + text: no només color */
+
+.password-wrap { position: relative; }
+.password-wrap .input { padding-right: 5.5rem; }
+.password-toggle {
+    position: absolute; right: .4rem; top: 50%; transform: translateY(-50%); min-height: 2.25rem; padding: 0 .75rem;
+    border: 0; border-radius: .5rem; background: var(--card); color: var(--text); font: inherit; font-size: .875rem; font-weight: 800; cursor: pointer;
+}
+.password-toggle:hover { background: var(--line-soft); }
+
+.check { display: flex; align-items: flex-start; gap: var(--s3); margin-bottom: var(--s4); }
+.check input { flex: none; width: 1.5rem; height: 1.5rem; margin: .1rem 0 0; accent-color: var(--pink); }
+.check label { font-weight: 800; }
+.check .hint { margin: 0; font-size: .9375rem; color: var(--muted); }
+
+fieldset { margin: 0 0 var(--s5); padding: 0; border: 0; min-width: 0; }
+legend { padding: 0; margin-bottom: var(--s3); font-size: 1.25rem; font-weight: 900; }
+.form-grid { display: grid; gap: 0 var(--s4); }
+@media (min-width: 40rem) { .form-grid { grid-template-columns: 1fr 1fr; } }
+.form-actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+
+.rules { margin: 0 0 var(--s4); padding-left: 1.25rem; color: var(--muted); font-size: .9375rem; }
+.form-footer { margin: var(--s5) 0 0; color: var(--muted); }
+
+/* ---------- Alertes ---------- */
+.alert {
+    display: flex; gap: var(--s3); align-items: flex-start; margin-bottom: var(--s4); padding: var(--s3) var(--s4);
+    background: var(--card); border: 2px solid var(--alert, var(--info)); border-left-width: 8px; border-radius: var(--r-panel);
+}
+.alert__icon { flex: none; font-size: 1.25rem; line-height: 1.4; color: var(--alert, var(--info)); }
+.alert__body { flex: 1; }
+.alert__title { display: block; font-weight: 900; }
+.alert p { margin-bottom: 0; }
+.alert ul { margin: var(--s2) 0 0; padding-left: 1.25rem; }
+.alert--success { --alert: var(--success); }
+.alert--error { --alert: var(--danger); }
+.alert--info { --alert: var(--info); }
+.alert:focus { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+/* ---------- Estat buit ---------- */
+.empty { padding: var(--s7) var(--s4); text-align: center; border: 2px dashed var(--line); border-radius: var(--r-card); }
+.empty h2, .empty h3 { margin-bottom: var(--s2); }
+.empty p { color: var(--muted); max-width: 30rem; margin-inline: auto; margin-bottom: var(--s4); }
+
+/* ---------- Migues de pa ---------- */
+.breadcrumb ol { display: flex; flex-wrap: wrap; gap: var(--s2); list-style: none; margin: 0 0 var(--s5); padding: 0; color: var(--muted); font-size: .9375rem; }
+.breadcrumb li + li::before { content: "/"; margin-right: var(--s2); }
+
+/* ============================================================
+   TARGETA DE SCORE (inspirada en references/score card exemple.png)
+   Quatre panells interiors: beatmap, dificultat, resultat i jugador.
+   ============================================================ */
+.score-list { display: grid; gap: var(--s4); list-style: none; margin: 0; padding: 0; }
+
+.score {
+    position: relative; display: grid; gap: .625rem; padding: .625rem;
+    background: var(--card); border: 2px solid var(--line-soft); border-radius: var(--r-card);
+}
+.score:hover { border-color: var(--line); }
+.score:focus-within { border-color: var(--focus); }
+/* Foco amb teclat al títol: contorn de 3 px a TOTA la targeta (el contorn del propi enllaç s'amaga perquè és minúscul i l'enllaç ocupa la targeta sencera) */
+.score:has(.score__title a:focus-visible) { outline: 3px solid var(--focus); outline-offset: 3px; }
+.score--featured { border: 3px solid var(--gold); }     /* l'únic contorn daurat: la score destacada */
+.score__panel { background: var(--well); border-radius: var(--r-panel); padding: var(--s3) var(--s4); min-width: 0; }
+
+@media (min-width: 46rem) {
+    .score { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+}
+
+/* Panell 1: beatmap */
+.score__map { display: flex; flex-direction: column; justify-content: center; gap: var(--s1); }
+.score__title { margin: 0; font-size: 1.5rem; line-height: 1.15; overflow-wrap: anywhere; }
+.score__title a { color: var(--text); text-decoration: none; }
+.score__title a::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-card); }   /* tota la targeta és clicable */
+.score__title a:focus-visible { outline: none; }
+.score__by, .score__mapper { margin: 0; color: var(--muted); }
+.score__by b, .score__mapper b { color: var(--text); font-weight: 800; }
+
+/* Panell 2: dificultat */
+.score__diff { display: flex; flex-direction: column; justify-content: center; gap: var(--s2); }
+.score__diff-top { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+.stars {
+    display: inline-flex; align-items: center; gap: .3rem; margin: 0; padding: .15rem .7rem;
+    border: 2px solid var(--gold); border-radius: 999px; color: var(--gold); font-weight: 900; font-variant-numeric: tabular-nums;
+}
+.score__diff-name { margin: 0; font-weight: 900; font-size: 1.125rem; overflow-wrap: anywhere; }
+.diff-stats { display: flex; gap: var(--s4); margin: 0; color: var(--muted); font-size: .9375rem; }
+.diff-stats div { display: flex; gap: var(--s1); }
+.diff-stats dt::after { content: ":"; }
+.diff-stats dd { margin: 0; color: var(--text); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* Panell 3: resultat */
+.score__result { display: grid; gap: var(--s3); }
+.score__result-top { display: flex; align-items: center; gap: var(--s3); }
+.rank {
+    --rank-color: var(--muted);
+    flex: none; display: grid; place-items: center; width: 4.25rem; height: 4.25rem; margin: 0;
+    border: 2px solid var(--rank-color); border-radius: var(--r-panel); background: var(--card);
+    color: var(--rank-color); font-weight: 900; font-size: 2.125rem; line-height: 1; letter-spacing: -.04em;
+}
+.rank--sm { width: 3rem; height: 3rem; font-size: 1.5rem; }
+.rank-ss { --rank-color: var(--rank-ss); } .rank-s { --rank-color: var(--rank-s); } .rank-a { --rank-color: var(--rank-a); }
+.rank-b { --rank-color: var(--rank-b); }   .rank-c { --rank-color: var(--rank-c); } .rank-d { --rank-color: var(--rank-d); }
+
+.score__numbers { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s3); }
+.acc { margin: 0; padding: .15rem .7rem; background: var(--card); border-radius: 999px; font-weight: 900; color: var(--acc); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.points { margin: 0; font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.125rem); line-height: 1; font-weight: 900; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+
+.hits { display: flex; flex-wrap: wrap; gap: var(--s2); list-style: none; margin: 0; padding: 0; }
+.hit {
+    display: inline-flex; align-items: baseline; gap: .4rem; padding: .2rem .75rem; background: var(--card); border-radius: 999px;
+    font-weight: 900; font-variant-numeric: tabular-nums; color: var(--c, var(--text));
+}
+.hit__l { font-size: .75rem; font-weight: 800; color: var(--muted); }
+.hit--300 { --c: var(--hit-300); } .hit--100 { --c: var(--hit-100); } .hit--50 { --c: var(--hit-50); } .hit--miss { --c: var(--hit-miss); }
+.hit--plain { --c: var(--text); }
+.hit--pp { --c: var(--pink); }
+
+/* Panell 4: jugador */
+.score__player { display: flex; align-items: center; gap: var(--s3); }
+.avatar {
+    --tone: var(--line);
+    flex: none; display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: var(--r-panel);
+    background: var(--tone); color: var(--avatar-ink); font-weight: 900; font-size: 1.5rem;
+}
+.tone-0 { --tone: #ff5ca8; } .tone-1 { --tone: #4fd6ff; } .tone-2 { --tone: #6be28c; }
+.tone-3 { --tone: #c9a2ff; } .tone-4 { --tone: #ffd43b; } .tone-5 { --tone: #ff9a5c; }
+.avatar--sm { width: 2.25rem; height: 2.25rem; font-size: 1.0625rem; border-radius: .5rem; }
+.score__player-text { min-width: 0; }
+.score__player-name { margin: 0; font-weight: 900; font-size: 1.125rem; overflow-wrap: anywhere; }
+.score__player-meta { margin: 0; color: var(--muted); font-size: .9375rem; }
+
+.score__actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; justify-content: space-between; padding: 0 var(--s2); }
+.score__actions .btn { position: relative; z-index: 1; }    /* per sobre de l'enllaç que cobreix la targeta */
+.badge-draft { margin: 0; padding: .15rem .7rem; border: 2px dashed var(--line); border-radius: 999px; font-weight: 800; font-size: .875rem; color: var(--muted); }
+
+/* ---------- Peu ---------- */
+.site-footer { border-top: 2px solid var(--line-soft); padding-block: var(--s5); color: var(--muted); font-size: .9375rem; }
+.footer-inner { display: grid; gap: var(--s3); }
+@media (min-width: 48rem) { .footer-inner { grid-template-columns: 1fr auto; align-items: center; } }
+.footer-nav { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); list-style: none; margin: 0; padding: 0; }
+.site-footer p { margin: 0; }
+
+/* ---------- Conmutador de tema (clar / fosc) ---------- */
+.theme-toggle { gap: var(--s2); }
+.theme-toggle svg { width: 1.125rem; height: 1.125rem; flex: none; }
+.theme-toggle[hidden] { display: none; }
+/* Estat actiu (mode fosc en ús): mateix llenguatge que els xips: contorn daurat + ✓ (no només color) */
+.theme-toggle[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); background: var(--card); }
+.theme-toggle[aria-pressed="true"]::after { content: "✓"; font-weight: 900; }
+.theme-toggle[aria-pressed="true"]:hover { color: var(--gold); }
+
+/* ---------- Accions sobre scores pròpies ---------- */
+.actions-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s5); }
+.score__actions-group { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.confirm { text-align: left; }
+.confirm .score { margin: var(--s4) 0 var(--s5); }

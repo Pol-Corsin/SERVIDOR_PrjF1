@@ -1,0 +1,35 @@
+/* Autor: Pol Corsin — PT04 osu! Scores
+   PÀGINES: inici, detall, autenticació, errors i guia d'estils. */
+
+/* ---------- Inici ---------- */
+.hero { display: grid; gap: var(--s6); align-items: center; padding-block: var(--s4) var(--s5); }
+@media (min-width: 62rem) { .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--s7); } }
+.hero__actions { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+.hero__caption { margin: 0 0 var(--s2); color: var(--muted); font-weight: 700; }
+
+/* ---------- Detall de score ---------- */
+.detail-extra { display: grid; gap: var(--s5); margin-top: var(--s5); }
+@media (min-width: 52rem) { .detail-extra { grid-template-columns: 1fr 1fr; } }
+.info-list { display: grid; gap: var(--s3); margin: 0; }
+.info-list div { display: flex; justify-content: space-between; gap: var(--s3); padding-bottom: var(--s3); border-bottom: 2px solid var(--line-soft); }
+.info-list dt { color: var(--muted); }
+.info-list dd { margin: 0; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Capçalera de pàgina interior ---------- */
+.page-head { margin-bottom: var(--s5); }
+.page-head h1 { font-size: clamp(1.875rem, 1.3rem + 2.4vw, 2.75rem); }
+
+/* ---------- Autenticació ---------- */
+.auth h1 { font-size: clamp(1.875rem, 1.4rem + 2vw, 2.5rem); }
+
+/* ---------- Errors ---------- */
+.error-page { text-align: center; padding-block: var(--s7); }
+.error-page .code { display: block; margin-bottom: var(--s3); font-size: clamp(4rem, 3rem + 8vw, 8rem); font-weight: 900; line-height: 1; letter-spacing: -.05em; color: var(--line); }
+.error-page .lead { margin-inline: auto; }
+.error-page ul { display: inline-block; text-align: left; }
+
+/* ---------- Guia d'estils ---------- */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: var(--s3); list-style: none; margin: 0; padding: 0; }
+.swatches li { padding: var(--s3); background: var(--card); border-radius: var(--r-panel); font-size: .875rem; }
+.swatches i { display: block; height: 2.5rem; margin-bottom: var(--s2); border-radius: .5rem; border: 2px solid var(--line); }
+.row { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }

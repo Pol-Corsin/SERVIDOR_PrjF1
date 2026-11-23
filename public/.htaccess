@@ -1,0 +1,12 @@
+# Autor: Pol Corsin — PT04 osu! Scores
+# Front controller: tot el que no sigui un fitxer o directori real va a index.php
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>

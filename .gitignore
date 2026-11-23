@@ -1,0 +1,21 @@
+﻿# Credencials i configuració local (no pujar mai a Git)
+config/config.php
+config/*.local.php
+.env
+
+# Logs i fitxers temporals
+storage/logs/*
+!storage/logs/.gitkeep
+*.log
+*.tmp
+
+# Sistema i editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Dependències (no n'hi ha previstes)
+vendor/
+node_modules/

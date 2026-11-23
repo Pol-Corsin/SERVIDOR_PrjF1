@@ -1,0 +1,21 @@
+# Autor: Pol Corsin — PT04 osu! Scores
+# .htaccess de l'ARREL del projecte.
+# Objectiu: que http://localhost/<carpeta>/ funcioni sense escriure /public.
+# Requereix mod_rewrite (activat per defecte a XAMPP) i AllowOverride All (per defecte a htdocs).
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # 1) Directoris i fitxers interns: mai accessibles des del navegador
+    RewriteRule ^(app|config|database|docs|storage|tools)(/|$) - [F,L]
+    RewriteRule ^\.git - [F,L]
+    RewriteRule \.(md|sql|log)$ - [F,L]
+
+    # 2) Si ja estem dins public/, deixem que public/.htaccess s'encarregui
+    RewriteRule ^public(/|$) - [L]
+
+    # 3) Qualsevol altra petició s'envia a public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>

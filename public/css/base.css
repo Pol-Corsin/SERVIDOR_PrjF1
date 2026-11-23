@@ -1,0 +1,202 @@
+/* Autor: Pol Corsin — PT04 osu! Scores
+   BASE: tipografia, tokens de disseny (tema fosc i clar), reset, layout.
+   Els tokens són la ÚNICA font de colors: tools/contrast.php els llegeix d'aquí i comprova el contrast dels dos temes. */
+
+/* Nunito (OFL), variable 400-900, autoallotjada: no depèn de cap CDN */
+@font-face {
+    font-family: "Nunito"; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url("../fonts/nunito-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Nunito"; font-style: normal; font-weight: 400 900; font-display: swap;
+    src: url("../fonts/nunito-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ============================================================
+   TEMES
+   - Per defecte i amb data-theme="dark": tema FOSC.
+   - Amb data-theme="light": tema CLAR.
+   - Sense data-theme (l'usuari no ha triat res): es respecta prefers-color-scheme.
+   El JavaScript de <head> posa data-theme abans de pintar la pàgina (sense parpelleig).
+   NOTA: els tokens del tema clar es repeteixen dues vegades (CSS no permet compartir
+   un bloc entre @media i un selector d'atribut). tools/tests.php comprova que són idèntics.
+   ============================================================ */
+:root,
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    /* Superfícies: la targeta (més clara) conté panells interiors (més foscos), com a la referència */
+    --bg: #100d17;
+    --card: #262136;
+    --well: #181421;
+    --line: #7a6fa6;            /* vora de camps i botons: ≥ 3:1 (WCAG 1.4.11) */
+    --line-soft: #3b3458;       /* només decoratiu */
+    --grid: rgb(255 255 255 / .025);
+
+    --text: #f4f1fb;
+    --muted: #bab1d4;
+
+    --pink: #ff5ca8;            /* acció principal */
+    --pink-hover: #ff80ba;
+    --pink-ink: #14111c;        /* text sobre rosa */
+    --gold: #ffd43b;            /* selecció, estrelles, rang SS */
+    --focus: #ffd43b;           /* anell de focus */
+    --link: #8ad8ff;
+    --success: #6be28c;
+    --danger: #ff8a8a;
+    --info: #8ad8ff;
+    --acc: #f6f0a5;             /* precisió */
+
+    /* Colors de judici d'osu! (només als comptadors de cops) */
+    --hit-300: #4fd6ff; --hit-100: #6be28c; --hit-50: #ffd43b; --hit-miss: #ff7a7a;
+
+    /* Rangs */
+    --rank-ss: #ffd43b; --rank-s: #ffe9a0; --rank-a: #6be28c;
+    --rank-b: #4fd6ff;  --rank-c: #c9a2ff; --rank-d: #ff8a8a;
+
+    --avatar-ink: #14111c;
+}
+
+@media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --bg: #f5f2fa;
+        --card: #ffffff;
+        --well: #ede8f6;
+        --line: #6a5f94;
+        --line-soft: #d3cce4;
+        --grid: rgb(40 30 80 / .045);
+
+        --text: #1c1630;
+        --muted: #4e4569;
+
+        --pink: #c81e6a;
+        --pink-hover: #a3125a;
+        --pink-ink: #ffffff;
+        --gold: #8a5a00;
+        --focus: #2b1fb8;
+        --link: #0b5cad;
+        --success: #1a7a3c;
+        --danger: #b3261e;
+        --info: #0b5cad;
+        --acc: #5e4f00;
+
+        --hit-300: #0a6a96; --hit-100: #1a7a3c; --hit-50: #8a5a00; --hit-miss: #b3261e;
+
+        --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #1a7a3c;
+        --rank-b: #0a6a96;  --rank-c: #6b3fb5; --rank-d: #b3261e;
+
+        --avatar-ink: #14111c;
+    }
+}
+
+:root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f5f2fa;
+    --card: #ffffff;
+    --well: #ede8f6;
+    --line: #6a5f94;
+    --line-soft: #d3cce4;
+    --grid: rgb(40 30 80 / .045);
+
+    --text: #1c1630;
+    --muted: #4e4569;
+
+    --pink: #c81e6a;
+    --pink-hover: #a3125a;
+    --pink-ink: #ffffff;
+    --gold: #8a5a00;
+    --focus: #2b1fb8;
+    --link: #0b5cad;
+    --success: #1a7a3c;
+    --danger: #b3261e;
+    --info: #0b5cad;
+    --acc: #5e4f00;
+
+    --hit-300: #0a6a96; --hit-100: #1a7a3c; --hit-50: #8a5a00; --hit-miss: #b3261e;
+
+    --rank-ss: #8a5a00; --rank-s: #6e5a00; --rank-a: #1a7a3c;
+    --rank-b: #0a6a96;  --rank-c: #6b3fb5; --rank-d: #b3261e;
+
+    --avatar-ink: #14111c;
+}
+
+/* Tokens que no depenen del tema */
+:root {
+    /* Espaiat (escala de 4 px) */
+    --s1: .25rem; --s2: .5rem; --s3: .75rem; --s4: 1rem; --s5: 1.5rem; --s6: 2rem; --s7: 3rem; --s8: 4.5rem;
+
+    /* Dos radis amb jerarquia: targeta exterior i panell interior */
+    --r-card: 1.125rem;
+    --r-panel: .75rem;
+
+    --font: "Nunito", ui-rounded, system-ui, "Segoe UI", sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
+
+body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    background-color: var(--bg);
+    /* "Beat grid": només una rejilla molt subtil */
+    background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 2.5rem 2.5rem;
+    color: var(--text);
+    font: 1.0625rem/1.6 var(--font);
+}
+
+main { flex: 1; padding-block: var(--s6) var(--s8); }
+main:focus { outline: none; }
+img, svg { max-width: 100%; }
+
+/* Tipografia: el pes (400/700/900) fa la jerarquia */
+h1, h2, h3 { margin: 0 0 var(--s3); line-height: 1.12; font-weight: 900; letter-spacing: -.015em; }
+h1 { font-size: clamp(2rem, 1.3rem + 3.2vw, 3.25rem); }
+h2 { font-size: clamp(1.4rem, 1.15rem + 1vw, 1.875rem); }
+h3 { font-size: 1.25rem; }
+p { margin: 0 0 var(--s4); }
+.lead { font-size: 1.1875rem; color: var(--muted); max-width: 38rem; }
+.muted { color: var(--muted); }
+small, .small { font-size: .875rem; }
+code { background: var(--well); padding: .1em .4em; border-radius: .35rem; font-size: .9em; }
+
+a { color: var(--link); text-underline-offset: .2em; text-decoration-thickness: 2px; }
+a:hover { color: var(--text); }
+
+/* Focus sempre visible (2.4.7 / 2.4.11 / 2.4.13): anell separat de l'element, amb color propi per tema */
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: .25rem; }
+
+/* ============================================================
+   LAYOUT
+   .container     : contingut ample (hero de l'inici)  70rem, centrat
+   .container.page: contingut de llistats i detall      56rem, centrat
+   Tot es centra amb margin-inline:auto i mai passa de l'amplada de la pantalla menys 2rem.
+   ============================================================ */
+.container { width: min(100% - 2rem, 70rem); margin-inline: auto; }
+.page { width: min(100% - 2rem, 56rem); margin-inline: auto; }
+.page--form { width: min(100% - 2rem, 48rem); }
+.narrow { width: min(100% - 2rem, 36rem); margin-inline: auto; }
+.stack > * + * { margin-top: var(--s4); }
+.section { margin-top: var(--s7); }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s4); }
+.section-head h2 { margin: 0; }
+
+.visually-hidden {
+    position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.skip-link {
+    position: absolute; left: var(--s4); top: -5rem; z-index: 100;
+    background: var(--pink); color: var(--pink-ink); font-weight: 800;
+    padding: var(--s3) var(--s4); border-radius: var(--r-panel);
+}
+.skip-link:focus { top: var(--s4); }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
